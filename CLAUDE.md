@@ -6,7 +6,7 @@
 > was consolidated here and deleted (2026-07-27). **Status: the toolkit is DONE**
 > — every container/format decodes byte-exact, the full editor suite + browser app
 > ship, and the engine oracle-pack (§7.9) is complete on the toolkit side; every
-> claim is re-proven by a script in [`tests/`](tests/README.md). Deferred by choice
+> claim is re-proven by a script in `tests/`. Deferred by choice
 > (not blocked): CHK trigger editor / mission-clone, HD DXT encoder (lossy).
 
 ---
@@ -23,7 +23,7 @@ number attached. If you have not seen the bytes, say so. A decoder that consumes
 a file without erroring is *not* evidence that you understood the format —
 see the times that exact mistake was made, §5.
 
-Every such number is re-runnable: **[`tests/`](tests/README.md)** holds one
+Every such number is re-runnable: **`tests/`** holds one
 script per claim. Run them before trusting anything written here; if a script
 and a document disagree, the script is right. Start a session by running
 `py tests/test_casc_and_shared.py` — it is the fastest way to confirm the

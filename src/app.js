@@ -75,8 +75,8 @@ function parseClassicGRP(buf){
   const u32=o=>(o>=0&&o+4<=N)?dv.getUint32(o,true):0;
   const frameCount=u16(0), maxW=u16(2), maxH=u16(4);
   // validity guard — helps diagnose a misidentified / non-classic file
-  if(frameCount===0) throw new Error('0 kadrų — greičiausiai ne klasikinis GRP');
-  if(6+frameCount*8>N) throw new Error('kadrų antraštės viršija failo dydį (frameCount='+frameCount+', dydis='+N+') — greičiausiai ne klasikinis GRP arba kitas formatas');
+  if(frameCount===0) throw new Error('0 frames — probably not a classic GRP');
+  if(6+frameCount*8>N) throw new Error('frame headers exceed file size (frameCount='+frameCount+', size='+N+') — probably not a classic GRP or a different format');
   const flat=classicIsFlat(b,dv,N);
   const frames=[]; const used=new Set(); let bad=0, clamped=0;
   for(let i=0;i<frameCount;i++){
@@ -109,9 +109,9 @@ function parseClassicGRP(buf){
     if(flags&F_CLAMP) clamped++;
     frames.push({x:fx,y:fy,w:fw,h:fh,idx,flags});
   }
-  const lbl='Classic GRP · '+(flat?'plokščias (ne RLE)':'RLE indexed')
-    +(bad?` · ${bad} kadr. su blogu offset'u`:'')
-    +(clamped?` · ${clamped} kadr. su apkarpytomis eilutėmis`:'');
+  const lbl='Classic GRP · '+(flat?'flat (non-RLE)':'RLE indexed')
+    +(bad?` · ${bad} frames with a bad offset`:'')
+    +(clamped?` · ${clamped} frames with clamped rows`:'');
   return {type:'classic',frameCount,maxW,maxH,frames,used,badFrames:bad,flat,fmtLabel:lbl};
 }
 // render a classic frame -> ImageData sized w*h using palette (Uint8Array768)
@@ -266,7 +266,7 @@ function parseAnim(buf){
     const frames=offs.map(o=>{const im=ddsToImageData(buf,o);return{x:0,y:0,w:im.width,h:im.height,_img:im};});
     let mw=0,mh=0;frames.forEach(f=>{mw=Math.max(mw,f.w);mh=Math.max(mh,f.h);});
     return {type:'anim',frameCount:frames.length,maxW:mw,maxH:mh,frames,rects:[],layers:[],layerAtlas:[],
-      fmtLabel:label0+' · atlaso peržiūra (netikėtas išdėstymas)'};
+      fmtLabel:label0+' · atlas preview (unexpected layout)'};
   }
   const names=[];
   for(let i=0;i<layerCount;i++){let o=NAME+i*32,s='';for(let k=0;k<32&&b[o+k];k++)s+=String.fromCharCode(b[o+k]);names.push(s);}
@@ -277,7 +277,7 @@ function parseAnim(buf){
     layers.push(names[i]); layerAtlas.push(ddsToImageData(buf,ddsOff));
   }
   if(!layerAtlas.length) return {type:'anim',frameCount:0,maxW:0,maxH:0,frames:[],rects:[],layers:[],layerAtlas:[],
-    fmtLabel:label0+' · nėra dekoduojamų sluoksnių'};
+    fmtLabel:label0+' · no decodable layers'};
   const diffuse=layerAtlas[0], aw=diffuse.width, ah=diffuse.height;
   const rects=[];
   for(let e=0;e<entryCount;e++){
@@ -296,7 +296,7 @@ function parseAnim(buf){
   sliceAnimFrames(file,0);
   let mw=0,mh=0;file.frames.forEach(f=>{mw=Math.max(mw,f.x+f.w);mh=Math.max(mh,f.y+f.h);});
   file.frameCount=file.frames.length; file.maxW=mw||aw; file.maxH=mh||ah;
-  file.fmtLabel=label0+' · '+layers.length+' sluoksniai ['+layers.join(',')+'] · '+file.frameCount+' kadrai · atlasas '+aw+'x'+ah;
+  file.fmtLabel=label0+' · '+layers.length+' layers ['+layers.join(',')+'] · '+file.frameCount+' frames · atlas '+aw+'x'+ah;
   return file;
 }
 
@@ -306,7 +306,7 @@ function parseAnim(buf){
 // Also handles 24-bit (3-plane) PCX. Returns a sprite-like object.
 function parsePCX(buf){
   const d=new Uint8Array(buf), dv=new DataView(buf);
-  if(d[0]!==0x0A) throw new Error('ne PCX (blogas parašas)');
+  if(d[0]!==0x0A) throw new Error('not a PCX (bad signature)');
   const enc=d[2], bpp=d[3];
   const xmin=dv.getUint16(4,true),ymin=dv.getUint16(6,true),xmax=dv.getUint16(8,true),ymax=dv.getUint16(10,true);
   const nplanes=d[65], bpl=dv.getUint16(66,true);
@@ -336,7 +336,7 @@ function parsePCX(buf){
       const di=(y*w+x)*4, base=y*totalPerLine;
       px[di]=raw[base+x]; px[di+1]=raw[base+bpl+x]; px[di+2]=raw[base+2*bpl+x]; px[di+3]=255;
     }
-  } else { throw new Error('nepalaikomas PCX bpp='+bpp+' planes='+nplanes); }
+  } else { throw new Error('unsupported PCX bpp='+bpp+' planes='+nplanes); }
   return {type:'pcx',frameCount:1,maxW:w,maxH:h,frames:[{x:0,y:0,w,h,_img:img}],fmtLabel:'PCX '+bpp+'-bit · '+w+'×'+h};
 }
 
@@ -402,7 +402,7 @@ SmkBigTree.prototype.get=function(b){
 function parseSMK(buf){
   const d=new Uint8Array(buf), dv=new DataView(buf);
   const sig=String.fromCharCode(d[0],d[1],d[2],d[3]);
-  if(sig!=='SMK2'&&sig!=='SMK4') throw new Error('ne Smacker failas');
+  if(sig!=='SMK2'&&sig!=='SMK4') throw new Error('not a Smacker file');
   const version=sig==='SMK4'?4:2;
   const w=dv.getUint32(4,true), h=dv.getUint32(8,true), nf=dv.getUint32(12,true);
   const rate=dv.getInt32(16,true);
@@ -485,7 +485,7 @@ function parseSMK(buf){
     frames.push({x:0,y:0,w,h,_img:img});
   }
   return {type:'smk',frameCount:frames.length,maxW:w,maxH:h,frames,
-    fmtLabel:'Smacker '+sig+' · '+w+'×'+h+' · '+nf+' kadrai · '+(Math.round(fps*10)/10)+' fps',
+    fmtLabel:'Smacker '+sig+' · '+w+'×'+h+' · '+nf+' frames · '+(Math.round(fps*10)/10)+' fps',
     smkFps:fps};
 }
 
@@ -495,12 +495,12 @@ function parseSMK(buf){
    <video> already does it correctly. */
 function parseWebM(buf){
   const d=new Uint8Array(buf), dv=new DataView(buf);
-  if(!(d[0]===0x1a&&d[1]===0x45&&d[2]===0xdf&&d[3]===0xa3)) throw new Error('ne EBML/Matroska');
+  if(!(d[0]===0x1a&&d[1]===0x45&&d[2]===0xdf&&d[3]===0xa3)) throw new Error('not EBML/Matroska');
   // 0xA0 = BlockGroup; without it, files using Block (0xA1) inside a BlockGroup
   // rather than a bare SimpleBlock parse to zero frames.
   const MASTER=new Set([0x1A45DFA3,0x18538067,0x1549A966,0x1654AE6B,0xAE,0xE0,0x1F43B675,0xA0]);
   function vint(p,keep){
-    const b=d[p]; if(!b) throw new Error('blogas EBML vint');
+    const b=d[p]; if(!b) throw new Error('bad EBML vint');
     let n=1,mask=0x80;
     while(!(b&mask)){mask>>=1;n++;}
     let v=keep?b:(b&(mask-1));
@@ -754,7 +754,7 @@ function parseAudio(buf,name){
   const isOgg=d[0]===0x4F&&d[1]===0x67&&d[2]===0x67&&d[3]===0x53;
   if(isOgg) return {type:'audio',audio:true,buf,mime:'audio/ogg',codec:'Ogg Vorbis',
     bytes:buf.byteLength,fmtLabel:'Ogg Vorbis · '+(buf.byteLength/1024|0)+' KB'};
-  if(!(d[0]===0x52&&d[1]===0x49&&d[2]===0x46&&d[3]===0x46)) throw new Error('ne RIFF/Ogg garsas');
+  if(!(d[0]===0x52&&d[1]===0x49&&d[2]===0x46&&d[3]===0x46)) throw new Error('not RIFF/Ogg audio');
   let p=12,info={};
   while(p+8<=d.length){
     const cid=String.fromCharCode(d[p],d[p+1],d[p+2],d[p+3]);
@@ -823,7 +823,7 @@ const MPQ=(function(){
   async function open(buf){
     const d=new Uint8Array(buf),dv=new DataView(buf);
     let base=-1;for(let o=0;o+4<=d.length;o+=512){if(d[o]===0x4D&&d[o+1]===0x50&&d[o+2]===0x51&&d[o+3]===0x1A){base=o;break;}}
-    if(base<0)throw new Error('nerastas MPQ parašas');
+    if(base<0)throw new Error('MPQ signature not found');
     const bshift=dv.getUint16(base+14,true),sectorSize=512<<bshift,formatVer=dv.getUint16(base+12,true);
     const htp=base+dv.getUint32(base+16,true),btp=base+dv.getUint32(base+20,true);
     const hts=dv.getUint32(base+24,true),bts=dv.getUint32(base+28,true);
@@ -833,9 +833,9 @@ const MPQ=(function(){
       for(let i=0;i<hts;i++){const e=(idx+i)%hts,o=e*4,bi=hashRaw[o+3];if(bi===0xFFFFFFFF)return -1;
         if(hashRaw[o]===a&&hashRaw[o+1]===b&&bi!==0xFFFFFFFE)return bi;}return -1;}
     async function readFile(name){
-      const bi=find(name);if(bi<0)throw new Error('nėra archyve: '+name);
+      const bi=find(name);if(bi<0)throw new Error('not in archive: '+name);
       const o=bi*4,blockOffset=blockRaw[o],filePos=base+blockOffset,fSize=blockRaw[o+2],flags=blockRaw[o+3];
-      if(!(flags&FLAG.EXISTS))throw new Error('nėra EXISTS');
+      if(!(flags&FLAG.EXISTS))throw new Error('no EXISTS');
       let key=0;const enc=(flags&FLAG.ENCRYPTED)!==0,comp=(flags&(FLAG.COMPRESS|FLAG.IMPLODE))!==0;
       if(enc){key=hashStr(name.split('\\').pop(),'key');if(flags&FLAG.FIX_KEY)key=((key+blockOffset)^fSize)>>>0;}
       async function decomp(bytes,outSize){
@@ -907,7 +907,7 @@ const CASC=(function(){
       if(mode===0x4E)parts.push(body);
       else if(mode===0x5A)parts.push(await inflateRaw(body));
       else if(mode===0x46)parts.push(await blte(body));
-      else if(mode===0x45)throw new Error('užšifruotas BLTE chunk (E)');
+      else if(mode===0x45)throw new Error('encrypted BLTE chunk (E)');
       else throw new Error('BLTE mode '+String.fromCharCode(mode));}
     let tot=0;for(const q of parts)tot+=q.length;const out=new Uint8Array(tot);let off=0;
     for(const q of parts){out.set(q,off);off+=q.length;}return out;}
@@ -917,7 +917,7 @@ const CASC=(function(){
 /* ---- CASC folder mode ---- */
 async function readCascBlob(entry){
   const file=S.cascData.get(entry.fileIdx);
-  if(!file) throw new Error('trūksta data.'+String(entry.fileIdx).padStart(3,'0'));
+  if(!file) throw new Error('missing data.'+String(entry.fileIdx).padStart(3,'0'));
   const raw=new Uint8Array(await file.slice(entry.offset,entry.offset+entry.size).arrayBuffer());
   return (await CASC.blte(raw.subarray(30))).buffer;
 }
@@ -938,13 +938,13 @@ async function openBufferSniff(name,buf){
   if(first===buf.byteLength){const s=parseDdsGRP(buf);precomputeDds(s,buf);return s;}
   const fc=dv.getUint16(0,true),w=dv.getUint16(2,true),h=dv.getUint16(4,true);
   if(fc>0&&fc<10000&&w>0&&w<=800&&h>0&&h<=800)return parseClassicGRP(buf);
-  throw new Error('neatpažintas turinys (sig '+[...d.slice(0,4)].map(x=>x.toString(16)).join(' ')+')');
+  throw new Error('unrecognized content (sig '+[...d.slice(0,4)].map(x=>x.toString(16)).join(' ')+')');
 }
 
 /* ---- CASC encoding + root (SC:R) ---- */
 function parseEncoding(buf){
   const d=new Uint8Array(buf),dv=new DataView(buf);
-  if(d[0]!==0x45||d[1]!==0x4E)throw new Error('ne encoding (EN)');
+  if(d[0]!==0x45||d[1]!==0x4E)throw new Error('not encoding (EN)');
   const ckeyPageKB=dv.getUint16(5,false),ckeyPageCount=dv.getUint32(9,false),especSize=dv.getUint32(18,false);
   const pageSize=ckeyPageKB*1024,pagesOff=22+especSize+ckeyPageCount*32,map=new Map();
   for(let pg=0;pg<ckeyPageCount;pg++){let p=pagesOff+pg*pageSize;const end=p+pageSize;
@@ -965,8 +965,8 @@ function parseRoot(buf){
 }
 async function readCascByEKey(ekeyHex){
   const entry=S.cascIndex.get(ekeyHex.slice(0,18));
-  if(!entry)throw new Error('EKey '+ekeyHex.slice(0,12)+' nerastas .idx');
-  if(!S.cascData.has(entry.fileIdx))throw new Error('reikia data.'+String(entry.fileIdx).padStart(3,'0'));
+  if(!entry)throw new Error('EKey '+ekeyHex.slice(0,12)+' not found in .idx');
+  if(!S.cascData.has(entry.fileIdx))throw new Error('needs data.'+String(entry.fileIdx).padStart(3,'0'));
   return await readCascBlob(entry);
 }
 async function findBuildConfig(files){
@@ -994,7 +994,7 @@ function buildCascNamedTree(){
   // Graphics plus the media the app can play: portraits and cinematics are
   // .webm, some UI is .smk, sounds are .wav/.ogg.
   const VG=new Set(['grp','dds','anim','pcx','webm','smk','wav','ogg']);
-  const root=newFolder('CASC grafika + media ('+S.cascRoot.size+' vardų root)');
+  const root=newFolder('CASC graphics + media ('+S.cascRoot.size+' root names)');
   let count=0;
   for(const [name,ck] of S.cascRoot){
     let ext=extOf(name); if(name.endsWith('.dds'))ext='dds';
@@ -1008,10 +1008,10 @@ function buildCascNamedTree(){
 }
 async function openCascNamed(f,row){
   S.activePath=f.path;$$('.row.file-row').forEach(r=>r.classList.remove('on'));if(row)row.classList.add('on');
-  showLoad('Ieškoma '+f.name+'…');
+  showLoad('Searching '+f.name+'…');
   try{
-    const ck=S.cascRoot.get(f.cascName.toLowerCase());if(!ck)throw new Error('vardas nerastas root');
-    const ek=S.cascEnc.get(ck);if(!ek)throw new Error('CKey nerastas encoding');
+    const ck=S.cascRoot.get(f.cascName.toLowerCase());if(!ck)throw new Error('name not found in root');
+    const ek=S.cascEnc.get(ck);if(!ek)throw new Error('CKey not found in encoding');
     const buf=await readCascByEKey(ek);
     const sprite=await openBufferSniff(f.cascName,buf);
     hideLoad();setActive(sprite);
@@ -1020,11 +1020,11 @@ async function openCascNamed(f,row){
 }
 
 async function cascFolder(files){
-  showLoad('Indeksuojami CASC .idx failai…');
+  showLoad('Indexing CASC .idx files…');
   try{
     const idxFiles=files.filter(f=>/\.idx$/i.test(f.name));
     const dataFiles=files.filter(f=>/(^|\/)data\.\d{3}$/i.test(f.webkitRelativePath||f.name));
-    if(!idxFiles.length)throw new Error('nerasta .idx failų (nurodykite Data/data arba install katalogą)');
+    if(!idxFiles.length)throw new Error('no .idx files found (specify Data/data or the install folder)');
     S.cascData=new Map();
     for(const f of dataFiles){const m=(f.name).match(/data\.(\d{3})/i);if(m)S.cascData.set(parseInt(m[1]),f);}
     const index=new Map();
@@ -1035,30 +1035,30 @@ async function cascFolder(files){
     const cfg=await findBuildConfig(files);
     if(cfg&&cfg.encoding&&cfg.root){
       try{
-        showLoad('Skaitomas encoding…');
+        showLoad('Reading encoding…');
         S.cascEnc=parseEncoding(await readCascByEKey(cfg.encoding));
-        const rootEKey=S.cascEnc.get(cfg.root); if(!rootEKey)throw new Error('root CKey nerastas encoding');
-        showLoad('Skaitomas root…');
+        const rootEKey=S.cascEnc.get(cfg.root); if(!rootEKey)throw new Error('root CKey not found in encoding');
+        showLoad('Reading root…');
         S.cascRoot=parseRoot(await readCascByEKey(rootEKey));
         const cnt=buildCascNamedTree(); hideLoad();
-        setStatus('CASC pagal vardus: <b>'+cnt+'</b> grafikos ir media failų (iš '+S.cascRoot.size+' root vardų). data['+[...S.cascData.keys()].sort((a,b)=>a-b).join(',')+']');
+        setStatus('CASC by name: <b>'+cnt+'</b> graphics and media files (of '+S.cascRoot.size+' root names). data['+[...S.cascData.keys()].sort((a,b)=>a-b).join(',')+']');
         return;
-      }catch(err){console.warn('named mode',err);setStatus('Named režimas nepavyko: '+err.message+' — pereinama į EKey.',true);}
+      }catch(err){console.warn('named mode',err);setStatus('Named mode failed: '+err.message+' — falling back to EKey.',true);}
     }
     buildCascEKeyTree(index); hideLoad();
-    setStatus('CASC pagal EKey: <b>'+index.size+'</b> įrašų. Vardams nurodykite install katalogą (kad rastų build config).');
-  }catch(e){hideLoad();showInfo(`<div class="mk">// CASC KLAIDA</div><div style="color:var(--red)">${e.message}</div>`);setStatus('CASC klaida: '+e.message,true);}
+    setStatus('CASC by EKey: <b>'+index.size+'</b> entries. For names, specify the install folder (so it finds the build config).');
+  }catch(e){hideLoad();showInfo(`<div class="mk">// CASC ERROR</div><div style="color:var(--red)">${e.message}</div>`);setStatus('CASC error: '+e.message,true);}
 }
 async function openCascNode(f,row){
-  if(!f.avail){setStatus('Šio EKey duomenų (data.'+String(f.entry.fileIdx).padStart(3,'0')+') nėra įkeltuose failuose.',true);return;}
+  if(!f.avail){setStatus('This EKey data (data.'+String(f.entry.fileIdx).padStart(3,'0')+') is not in the loaded files.',true);return;}
   S.activePath=f.path;$$('.row.file-row').forEach(r=>r.classList.remove('on'));if(row)row.classList.add('on');
-  showLoad('BLTE dekodavimas '+f.name+'…');
+  showLoad('BLTE decoding '+f.name+'…');
   try{
     const buf=await readCascBlob(f.entry);
     const sprite=await openBufferSniff(f.name,buf);
     hideLoad();setActive(sprite);
   }catch(e){hideLoad();console.error(e);
-    showInfo(`<div class="mk">// CASC BLOB</div><div>EKey ${f.entry.ekey}</div><div style="color:var(--amber)">${e.message}</div><div style="max-width:420px;color:var(--ink-dim)">Šis blob'as iššifruotas, bet tai ne grafika (greičiausiai garsas/duomenys) arba neatpažintas.</div>`);
+    showInfo(`<div class="mk">// CASC BLOB</div><div>EKey ${f.entry.ekey}</div><div style="color:var(--amber)">${e.message}</div><div style="max-width:420px;color:var(--ink-dim)">This blob was decrypted, but it is not graphics (probably audio/data) or unrecognized.</div>`);
     setStatus('CASC: '+e.message);}
 }
 
@@ -1142,16 +1142,16 @@ function folderHasMatch(node){
   for(const [,c] of node.folders) if(folderHasMatch(c)) return true;
   return false;
 }
-function badge(ext){const map={grp:'GRP',dds:'DDS',anim:'ANIM',pcx:'PCX',smk:'SMK',webm:'WEBM',wav:'GARSAS',mpq:'MPQ',casc:'EKEY'};
+function badge(ext){const map={grp:'GRP',dds:'DDS',anim:'ANIM',pcx:'PCX',smk:'SMK',webm:'WEBM',wav:'AUDIO',mpq:'MPQ',casc:'EKEY'};
   return map[ext]?`<span class="badge b-${ext}">${map[ext]}</span>`:'';}
 function renderTree(){
   const host=$('#tree'); host.innerHTML='';
-  if(!S.root){host.innerHTML='<div style="padding:14px;color:var(--ink-dim);font-size:12px">Nieko neįkelta.</div>';return;}
+  if(!S.root){host.innerHTML='<div style="padding:14px;color:var(--ink-dim);font-size:12px">Nothing loaded.</div>';return;}
   const frag=document.createDocumentFragment();
   renderFolder(S.root,frag,'',true);
   host.appendChild(frag);
   const shown=$('#tree').querySelectorAll('.row.file-row').length;
-  $('#statMeta').textContent=S.totalFiles?`${S.totalFiles} failai · ${shown} rodoma`:'';
+  $('#statMeta').textContent=S.totalFiles?`${S.totalFiles} files · ${shown} shown`:'';
 }
 function renderFolder(node,host,prefix,isRoot){
   // folders first
@@ -1189,7 +1189,7 @@ function renderFolder(node,host,prefix,isRoot){
 function countFiles(node){let n=0;for(const f of node.files)if(f.ext!=='other')n++;for(const[,c]of node.folders)n+=countFiles(c);return n;}
 
 /* ---- open a file node (lazy) ---- */
-function showLoad(t){$('#loadText').textContent=t||'Kraunama…';$('#loadMsg').style.display='flex';}
+function showLoad(t){$('#loadText').textContent=t||'Loading…';$('#loadMsg').style.display='flex';}
 function hideLoad(){$('#loadMsg').style.display='none';}
 function showInfo(html){['gridView','detailView','animView','emptyState'].forEach(id=>$('#'+id).style.display='none');
   $('#infoMsg').style.display='flex';$('#infoMsg').innerHTML=html;}
@@ -1203,15 +1203,15 @@ async function openFileNode(f,row){
   if(f.ext==='mpq'){ return toggleMpq(f,row); }
   S.activePath=f.path; $$('.row.file-row').forEach(r=>r.classList.remove('on')); if(row)row.classList.add('on');
   if(S.parsedCache.has(f.path)){ setActive(S.parsedCache.get(f.path)); return; }
-  showLoad('Dekoduojama '+f.name+'…');
+  showLoad('Decoding '+f.name+'…');
   try{
     const buf=await readNode(f);
     const sprite=await openBuffer(f.name,buf);
     S.parsedCache.set(f.path,sprite);
     hideLoad(); setActive(sprite);
   }catch(e){ hideLoad(); console.error(e);
-    showInfo(`<div class="mk">// DEKODAVIMO KLAIDA</div><div>${f.name}</div><div style="color:var(--red)">${e.message}</div>`);
-    setStatus('Klaida: <b>'+f.name+'</b> — '+e.message,true);
+    showInfo(`<div class="mk">// DECODE ERROR</div><div>${f.name}</div><div style="color:var(--red)">${e.message}</div>`);
+    setStatus('Error: <b>'+f.name+'</b> — '+e.message,true);
   }
 }
 
@@ -1351,7 +1351,7 @@ function aiMergeInto(baseU8,scripts){
     ids.add(id); off+=16;
   }
   const newCode=[]; const newEnts=[];
-  for(const s of scripts){ if(ids.has(s.id))throw new Error('ID "'+s.id+'" jau yra stock faile'); ids.add(s.id);
+  for(const s of scripts){ if(ids.has(s.id))throw new Error('ID "'+s.id+'" already exists in the stock file'); ids.add(s.id);
     const start=oldTable+newCode.length; const {code:body}=aiLayoutScript(s.code,start);
     for(const b of body)newCode.push(b); newEnts.push([s.id,start,s.name|0,s.flags|0]); }
   const newTable=oldTable+newCode.length;
@@ -1370,13 +1370,13 @@ function aiParseSteps(text){
     const line=raw.replace(/#.*$/,'').trim(); if(!line)return;
     if(line[0]===':'){ steps.push(['label',line.slice(1).trim()]); return; }
     const tok=line.split(/[\s,]+/).filter(Boolean); const name=tok[0]; const spec=AI_OP_BY_NAME[name];
-    if(!spec)throw new Error('eil. '+(li+1)+': nežinomas opcode "'+name+'"');
+    if(!spec)throw new Error('line '+(li+1)+': unknown opcode "'+name+'"');
     const ra=tok.slice(1);
-    if(ra.length!==spec.a.length)throw new Error('eil. '+(li+1)+': '+name+' reikia '+spec.a.length+' arg., gauta '+ra.length);
+    if(ra.length!==spec.a.length)throw new Error('line '+(li+1)+': '+name+' needs '+spec.a.length+' args, got '+ra.length);
     const args=spec.a.map(([t,sz],k)=>{ const r=ra[k];
       if(t==='address')return r; if(sz<0)return r;
       const v=/^0x/i.test(r)?parseInt(r,16):parseInt(r,10);
-      if(Number.isNaN(v))throw new Error('eil. '+(li+1)+': blogas skaičius "'+r+'"'); return v; });
+      if(Number.isNaN(v))throw new Error('line '+(li+1)+': bad number "'+r+'"'); return v; });
     steps.push([name,...args]);
   });
   return steps;
@@ -1465,11 +1465,11 @@ function zipStore(entries){        // entries: [{name, data:Uint8Array}] -> Uint
 function renderAiHtml(f){
   window._aiFile=f;
   const used=f.scripts; const ok=used.filter(s=>!s.err).length;
-  let h='<div class="mk">// '+f.source+' — '+used.length+' scriptai su kodu, '+ok+' dekoduoti švariai (0 nežinomų opcode)</div>';
+  let h='<div class="mk">// '+f.source+' — '+used.length+' scripts with code, '+ok+' decoded cleanly (0 unknown opcodes)</div>';
   h+='<div style="max-width:760px;margin-bottom:6px;font:12px ui-monospace,monospace">Difficulty scaler: '
     +'<select onchange="aiProfile=this.value;showInfo(renderAiHtml(window._aiFile))" style="background:var(--panel);color:var(--ink);border:1px solid var(--edge);padding:2px 6px">'
     +['off','hard','brutal'].map(p=>'<option value="'+p+'"'+(p===aiProfile?' selected':'')+'>'+p+'</option>').join('')+'</select>'
-    +(aiProfile!=='off'?' <span style="color:#c8b878">— skalintos reikšmės pažymėtos <b>senas→naujas</b>; dydžiai nekinta → layout-safe ✓</span>':'')+'</div>';
+    +(aiProfile!=='off'?' <span style="color:#c8b878">— scaled values marked <b>old→new</b>; sizes unchanged → layout-safe ✓</span>':'')+'</div>';
   h+='<div style="max-width:760px;max-height:70vh;overflow:auto;font:12px/1.55 ui-monospace,Consolas,monospace;text-align:left">';
   for(const s of used){
     const fl=[]; if(s.flags&1)fl.push('loc'); if(s.flags&2)fl.push('hidden'); if(s.flags&4)fl.push('bw');
@@ -1693,15 +1693,15 @@ function parseChk(buf,name){
 }
 function renderChkHtml(f){
   const SIDE={0:'Zerg',1:'Terran',2:'Protoss',4:'Neutral',7:'Inactive'};
-  let h='<div class="mk">// '+f.fmtLabel+' — CHK: '+f.secCount+' sekcijos, '+f.triggers+' trigeriai, '
-    +f.locs+' locations, <b>'+f.links.length+'</b> AI-script veiksmai</div>';
-  if(!f.links.length){ h+='<div style="max-width:520px;color:var(--ink-dim)">Šitas žemėlapis neturi „Run AI Script" trigerių.</div>'; return h; }
+  let h='<div class="mk">// '+f.fmtLabel+' — CHK: '+f.secCount+' sections, '+f.triggers+' triggers, '
+    +f.locs+' locations, <b>'+f.links.length+'</b> AI-script actions</div>';
+  if(!f.links.length){ h+='<div style="max-width:520px;color:var(--ink-dim)">This map has no "Run AI Script" triggers.</div>'; return h; }
   // usage summary
   const byScript={}; for(const l of f.links){(byScript[l.script]=byScript[l.script]||[]).push(l);}
   h+='<div style="max-width:820px;max-height:72vh;overflow:auto;text-align:left;font:12px/1.6 ui-monospace,Consolas,monospace">';
   h+='<table style="border-collapse:collapse;width:100%"><thead><tr style="color:var(--teal);border-bottom:1px solid var(--edge)">'
-    +'<th style="text-align:left;padding:3px 8px">Player</th><th style="text-align:left;padding:3px 8px">Rasė</th>'
-    +'<th style="text-align:left;padding:3px 8px">Script</th><th style="text-align:left;padding:3px 8px">Veiksmas</th>'
+    +'<th style="text-align:left;padding:3px 8px">Player</th><th style="text-align:left;padding:3px 8px">Race</th>'
+    +'<th style="text-align:left;padding:3px 8px">Script</th><th style="text-align:left;padding:3px 8px">Action</th>'
     +'<th style="text-align:left;padding:3px 8px">Location</th></tr></thead><tbody>';
   for(const l of f.links){
     const pl=l.players.length?l.players.join(','):'—';
@@ -1713,7 +1713,7 @@ function renderChkHtml(f){
       +'<td style="padding:3px 8px">'+(l.locName||(l.loc?('loc '+l.loc):'—'))+'</td></tr>';
   }
   h+='</tbody></table>';
-  h+='<div class="mk" style="margin-top:10px">// Script usage šioje misijoje</div>';
+  h+='<div class="mk" style="margin-top:10px">// Script usage in this mission</div>';
   for(const sid in byScript){ h+='<div><span style="color:#c8b878">'+sid+'</span> <span style="color:var(--ink-dim)">— '
     +byScript[sid].length+'× ('+[...new Set(byScript[sid].map(l=>'P'+l.players.join(',')))].join(' ')+')</span></div>'; }
   h+='</div>';
@@ -1763,8 +1763,8 @@ async function toggleMpq(f,row){
       for(const nm of S.externalListfile){ if(seen.has(nm.toLowerCase()))continue;
         if(mpq.find(nm)>=0){ names.push(nm); seen.add(nm.toLowerCase()); addedExt++; } } }
     if(!names.length){ hideLoad();
-      showInfo(`<div class="mk">// MPQ BE LISTFILE</div><div>${f.name}</div><div>Archyvas atvertas (${mpq.hashTableSize} hash įrašų), bet nei viduje, nei įkeltame listfile nerasta atitinkančių vardų. Įkelkite tinkamą StarCraft listfile (mygtukas „Atverti failus" → .txt).</div>`);
-      setStatus('MPQ be listfile: <b>'+f.name+'</b>',true); return; }
+      showInfo(`<div class="mk">// MPQ WITHOUT LISTFILE</div><div>${f.name}</div><div>Archive opened (${mpq.hashTableSize} hash entries), but no matching names were found inside it or in the loaded listfile. Load a proper StarCraft listfile (the "Open files" button → .txt).</div>`);
+      setStatus('MPQ without listfile: <b>'+f.name+'</b>',true); return; }
     // build a virtual sub-tree from names
     const vroot=newFolder(f.name);
     for(const nm of names){
@@ -1776,10 +1776,10 @@ async function toggleMpq(f,row){
     }
     f._children=vroot;
     hideLoad(); renderTree();
-    setStatus('Archyvas: <b>'+f.name+'</b> — '+names.length+' failai'+(addedExt?' (+'+addedExt+' iš išorinio listfile)':'')+' (v'+mpq.formatVer+')');
+    setStatus('Archive: <b>'+f.name+'</b> — '+names.length+' files'+(addedExt?' (+'+addedExt+' from external listfile)':'')+' (v'+mpq.formatVer+')');
   }catch(e){ hideLoad(); console.error(e);
-    showInfo(`<div class="mk">// MPQ KLAIDA</div><div>${f.name}</div><div style="color:var(--red)">${e.message}</div>`);
-    setStatus('MPQ klaida: '+e.message,true);
+    showInfo(`<div class="mk">// MPQ ERROR</div><div>${f.name}</div><div style="color:var(--red)">${e.message}</div>`);
+    setStatus('MPQ error: '+e.message,true);
   }
 }
 
@@ -1822,12 +1822,12 @@ function render(){
     S.audUrl=URL.createObjectURL(new Blob([f.buf],{type:f.mime}));
     $('#audEl').src=S.audUrl;
     $('#audFmt').textContent=f.fmtLabel;
-    const rows=[['Kodekas',f.codec],['Dydis',(f.bytes/1024).toFixed(1)+' KB']];
-    if(f.rate) rows.push(['Dažnis',f.rate+' Hz'],['Bitai',f.bits],['Kanalai',f.ch],
-                         ['Trukmė',f.dur?f.dur.toFixed(2)+' s':'—']);
+    const rows=[['Codec',f.codec],['Size',(f.bytes/1024).toFixed(1)+' KB']];
+    if(f.rate) rows.push(['Rate',f.rate+' Hz'],['Bits',f.bits],['Channels',f.ch],
+                         ['Duration',f.dur?f.dur.toFixed(2)+' s':'—']);
     $('#audTele').innerHTML=rows.map(r=>`<div class="k">${r[0]}</div><div class="v">${r[1]}</div>`).join('');
     drawWaveform(f);
-    setStatus('Įkelta — '+f.fmtLabel);
+    setStatus('Loaded — '+f.fmtLabel);
     return;
   }
   if(f.video){                                   // WebM: the browser decodes it
@@ -1839,37 +1839,37 @@ function render(){
     el.src=S.vidUrl;
     el.style.width=(f.width*S.vidZoom)+'px'; el.style.height=(f.height*S.vidZoom)+'px';
     $('#vidFmt').textContent=f.fmtLabel;
-    const rows=[['Kodekas',f.codec],['Matmenys',f.width+' × '+f.height],
-      ['Blokų (kadrų)',f.frames],
-      ['Trukmė',f.duration?f.duration.toFixed(3)+' s':'—'],
+    const rows=[['Codec',f.codec],['Dimensions',f.width+' × '+f.height],
+      ['Blocks (frames)',f.frames],
+      ['Duration',f.duration?f.duration.toFixed(3)+' s':'—'],
       ['FPS',f.fps?(Math.round(f.fps*100)/100):'—'],
       ['Muxer',f.muxer||'—']];
     $('#vidTele').innerHTML=rows.map(r=>`<div class="k">${r[0]}</div><div class="v">${r[1]}</div>`).join('');
-    setStatus('Įkelta — '+f.fmtLabel+' · dekoduoja naršyklė');
+    setStatus('Loaded — '+f.fmtLabel+' · decoded by the browser');
     return;
   }
   // AI scripts (aiscript.bin / bwscript.bin) — disassembly listing
   if(f.ai){
     $('#ctlPanel').style.display='none';
     showInfo(renderAiHtml(f));
-    setStatus('AI: <b>'+f.scripts.length+'</b> scriptai su kodu — '+f.source);
+    setStatus('AI: <b>'+f.scripts.length+'</b> scripts with code — '+f.source);
     return;
   }
   // CHK scenario — campaign AI mission linkage
   if(f.chk){
     $('#ctlPanel').style.display='none';
     showInfo(renderChkHtml(f));
-    setStatus('CHK: <b>'+f.links.length+'</b> AI-script veiksmai — '+f.fmtLabel);
+    setStatus('CHK: <b>'+f.links.length+'</b> AI-script actions — '+f.fmtLabel);
     return;
   }
   // info-only types (SMK)
   if(f.info){
     $('#ctlPanel').style.display='none';
     showInfo(`<div class="mk">// ${f.fmtLabel}</div>
-      <div class="tele" style="max-width:280px"><div class="k">Matmenys</div><div class="v">${f.width}×${f.height}</div>
-      <div class="k">Kadrai</div><div class="v">${f.frames}</div><div class="k">FPS</div><div class="v">${f.fps}</div></div>
-      <div style="max-width:460px">Smacker vaizdo kadrų dekodavimas (Huffman medžiai + blokų prediktoriai) — atskiras kodekas, dar neįdiegtas. Antraštės metaduomenys aukščiau.</div>`);
-    setStatus('SMK: <b>'+f.width+'×'+f.height+'</b>, '+f.frames+' kadrai.');
+      <div class="tele" style="max-width:280px"><div class="k">Dimensions</div><div class="v">${f.width}×${f.height}</div>
+      <div class="k">Frames</div><div class="v">${f.frames}</div><div class="k">FPS</div><div class="v">${f.fps}</div></div>
+      <div style="max-width:460px">Smacker video frame decoding (Huffman trees + block predictors) — a separate codec, not yet implemented. Header metadata above.</div>`);
+    setStatus('SMK: <b>'+f.width+'×'+f.height+'</b>, '+f.frames+' frames.');
     return;
   }
   $('#palCtl').style.display=(f.type==='classic')?'block':'none';
@@ -1880,10 +1880,10 @@ function render(){
     const nOpts=f.layers.length+(canComposite?1:0);
     if(sel.options.length!==nOpts||sel.dataset.for!==f._id){
       let html=f.layers.map((n,i)=>`<option value="${i}">${n}</option>`).join('');
-      if(canComposite)html+=`<option value="composite">★ Kompozitas (diffuse+teamcolor+emissive)</option>`;
+      if(canComposite)html+=`<option value="composite">★ Composite (diffuse+teamcolor+emissive)</option>`;
       sel.innerHTML=html;sel.dataset.for=f._id;}
     sel.value=f.activeLayer===undefined?0:f.activeLayer;}
-  setStatus('Įkelta — '+f.fmtLabel);
+  setStatus('Loaded — '+f.fmtLabel);
   if(S.tab==='grid')buildGrid(f); else if(S.tab==='detail')buildDetail(f); else buildAnim(f);
 }
 
@@ -1909,9 +1909,9 @@ function buildDetail(f){const v=$('#detailView');v.style.display='flex';
   const i=Math.min(S.sel,f.frameCount-1);S.sel=i;const fr=f.frames[i];
   const cv=$('#detCanvas');bgStyle(cv.parentElement);drawScaled(cv,frameImage(f,i),S.zoom);
   $('#detFmt').textContent=f.fmtLabel;
-  const rows=[['Kadras',i+' / '+(f.frameCount-1)],['Matmenys',fr.w+' × '+fr.h],['Poslinkis X/Y',(fr.x||0)+', '+(fr.y||0)],['Drobė',f.maxW+' × '+f.maxH]];
-  if(f.type==='anim')rows.push(['Sluoksnis',(f.layers&&f.layers[f.activeLayer||0])||'diffuse']);
-  if(f.type==='classic')rows.push(['Paletė',S.palMode]);
+  const rows=[['Frame',i+' / '+(f.frameCount-1)],['Dimensions',fr.w+' × '+fr.h],['Offset X/Y',(fr.x||0)+', '+(fr.y||0)],['Canvas',f.maxW+' × '+f.maxH]];
+  if(f.type==='anim')rows.push(['Layer',(f.layers&&f.layers[f.activeLayer||0])||'diffuse']);
+  if(f.type==='classic')rows.push(['Palette',S.palMode]);
   $('#detTele').innerHTML=rows.map(r=>`<div class="k">${r[0]}</div><div class="v">${r[1]}</div>`).join('');}
 function compositeFrame(f,i){const cv=document.createElement('canvas');cv.width=f.maxW;cv.height=f.maxH;
   const ctx=cv.getContext('2d');const img=frameImage(f,i);
@@ -1925,9 +1925,9 @@ function drawAnim(f,i){S.sel=i;$('#animIx').textContent=i;$('#scrub').value=i;
   const src=compositeFrame(f,i);const cv=$('#animCanvas');bgStyle(cv.parentElement);
   const s=S.zoom;cv.width=src.width*s;cv.height=src.height*s;const ctx=cv.getContext('2d');ctx.imageSmoothingEnabled=false;
   ctx.clearRect(0,0,cv.width,cv.height);ctx.drawImage(src,0,0,cv.width,cv.height);}
-function stopAnim(){S.playing=false;if(S.animT){clearInterval(S.animT);S.animT=null;}const b=$('#playBtn');if(b)b.textContent='▶ Groti';}
+function stopAnim(){S.playing=false;if(S.animT){clearInterval(S.animT);S.animT=null;}const b=$('#playBtn');if(b)b.textContent='▶ Play';}
 function togglePlay(){const f=S.active;if(!f||!f.frameCount)return;if(S.playing){stopAnim();return;}
-  S.playing=true;$('#playBtn').textContent='❚❚ Pauzė';let i=+$('#scrub').value;
+  S.playing=true;$('#playBtn').textContent='❚❚ Pause';let i=+$('#scrub').value;
   S.animT=setInterval(()=>{i=(i+1)%f.frameCount;drawAnim(f,i);},1000/S.fps);}
 function dl(url,name){const a=document.createElement('a');a.href=url;a.download=name;a.click();}
 function exportFrame(){const f=S.active;if(!f)return;const img=frameImage(f,S.sel);
@@ -1941,7 +1941,7 @@ function exportSheet(){const f=S.active;if(!f)return;const cols=Math.ceil(Math.s
 // same layout grp2png --dump-idx writes.
 function exportGrpi(){
   const f=S.active;
-  if(!f||f.type!=='classic'){setStatus('.grpi tinka tik klasikiniam GRP (indeksams).',true);return;}
+  if(!f||f.type!=='classic'){setStatus('.grpi only works for a classic GRP (indices).',true);return;}
   let total=16; for(const fr of f.frames) total+=12+fr.w*fr.h;
   const buf=new ArrayBuffer(total), dv=new DataView(buf), out=new Uint8Array(buf);
   out[0]=71;out[1]=82;out[2]=80;out[3]=73;                 // 'GRPI'
@@ -1957,21 +1957,21 @@ function exportGrpi(){
   const url=URL.createObjectURL(new Blob([buf]));
   dl(url,(S.activePath||'sprite').split(/[\\/]/).pop().replace(/\.grp$/i,'')+'.grpi');
   URL.revokeObjectURL(url);
-  setStatus('Eksportuota <b>.grpi</b> — '+f.frames.length+' kadrai, '+total+' B (indeksai, be spalvos).');
+  setStatus('Exported <b>.grpi</b> — '+f.frames.length+' frames, '+total+' B (indices, no colour).');
 }
 
 async function paletteFromMpq(path){
   if(!path) return;
-  if(!S.lastMpq){setStatus('Pirma atverkite .mpq archyvą (paspauskite jį medyje).',true);return;}
+  if(!S.lastMpq){setStatus('Open a .mpq archive first (click it in the tree).',true);return;}
   try{
     const bytes=await S.lastMpq.readFile(path);
     const pal=parsePaletteFile(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength),path);
-    if(!pal){setStatus('Nepavyko atpažinti paletės: '+path,true);return;}
+    if(!pal){setStatus('Could not recognize palette: '+path,true);return;}
     S.customPal=pal; S.palMode='custom'; $('#palMode').value='custom';
     $('#palName').textContent=path.split('\\').pop();
     S.frameCache.clear(); render();
-    setStatus('Autentiška paletė iš MPQ: <b>'+path+'</b>');
-  }catch(e){setStatus('Paletė nerasta archyve: '+path+' ('+e.message+')',true);}
+    setStatus('Authentic palette from MPQ: <b>'+path+'</b>');
+  }catch(e){setStatus('Palette not found in archive: '+path+' ('+e.message+')',true);}
 }
 
 // Waveform straight from the PCM samples — a broken decode looks like noise,
@@ -1983,7 +1983,7 @@ function drawWaveform(f){
   ctx.fillStyle='#0b1220'; ctx.fillRect(0,0,W,H);
   ctx.strokeStyle='#1d3a4a'; ctx.beginPath(); ctx.moveTo(0,H/2); ctx.lineTo(W,H/2); ctx.stroke();
   if(f.codec!=='PCM'||f.bits!==16){ ctx.fillStyle='#7f93a8'; ctx.font='11px monospace';
-    ctx.fillText('(banga rodoma tik 16-bit PCM)',12,H/2-8); return; }
+    ctx.fillText('(waveform shown only for 16-bit PCM)',12,H/2-8); return; }
   const d=new Uint8Array(f.buf), dv=new DataView(f.buf);
   let p=12, off=0, len=0;
   while(p+8<=d.length){ const cid=String.fromCharCode(d[p],d[p+1],d[p+2],d[p+3]);
@@ -2020,7 +2020,7 @@ async function exportWebmFrames(){
   const wasLoop=el.loop; el.loop=false; el.pause();
   try{
     for(let i=0;i<n;i++){
-      msg.textContent='kadras '+(i+1)+' / '+n+'…';
+      msg.textContent='frame '+(i+1)+' / '+n+'…';
       const t=Math.min(dur-1e-4,(i+0.5)*dur/n);
       await new Promise(res=>{ const h=()=>{el.removeEventListener('seeked',h);res();};
         el.addEventListener('seeked',h); el.currentTime=t; });
@@ -2029,7 +2029,7 @@ async function exportWebmFrames(){
     }
     const url=sheet.toDataURL('image/png');
     dl(url,(S.activePath||'video').split(/[\\/]/).pop().replace(/\.webm$/i,'')+'_frames.png');
-    msg.innerHTML='<span style="color:var(--teal)">✓ '+n+' kadrai, '+sheet.width+'×'+sheet.height+'</span>';
+    msg.innerHTML='<span style="color:var(--teal)">✓ '+n+' frames, '+sheet.width+'×'+sheet.height+'</span>';
   }catch(e){ msg.innerHTML='<span style="color:var(--red)">'+e.message+'</span>'; }
   finally{ el.loop=wasLoop; el.play().catch(()=>{}); }
 }
@@ -2042,20 +2042,20 @@ $('#dirInput').addEventListener('change',e=>{
   S.root=buildTreeFromFiles(files); S.totalFiles=countFiles(S.root); S.expanded.clear();
   // auto-expand top level
   for(const [,c] of S.root.folders){ S.expanded.add('/'+c.name); }
-  renderTree(); setStatus('Aplankas įkeltas — <b>'+S.totalFiles+'</b> tinkamų failų.');
+  renderTree(); setStatus('Folder loaded — <b>'+S.totalFiles+'</b> valid files.');
 });
 $('#cascInput').addEventListener('change',e=>{const files=[...e.target.files];if(files.length)cascFolder(files);});
 async function loadListfile(file){
   const txt=await file.text();
   S.externalListfile=txt.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
-  setStatus('Išorinis listfile įkeltas: <b>'+S.externalListfile.length+'</b> vardų. Atverkite .mpq, kad pritaikytumėte.');
+  setStatus('External listfile loaded: <b>'+S.externalListfile.length+'</b> names. Open a .mpq to apply it.');
 }
 $('#fileInput').addEventListener('change',e=>{
   const files=[...e.target.files]; if(!files.length)return;
   const lists=files.filter(f=>/\.(txt|lst)$/i.test(f.name)), assets=files.filter(f=>!/\.(txt|lst)$/i.test(f.name));
   if(lists.length){ loadListfile(lists[0]); }
   if(assets.length){ S.root=S.root||newFolder(''); for(const f of assets){ S.root.files.push({kind:'file',name:f.name,ext:extOf(f.name),file:f,path:'@/'+f.name}); }
-    S.totalFiles=countFiles(S.root); renderTree(); setStatus(assets.length+' failai įkelti.'); }
+    S.totalFiles=countFiles(S.root); renderTree(); setStatus(assets.length+' files loaded.'); }
 });
 $('#filter').addEventListener('input',e=>{S.filter=e.target.value.toLowerCase().trim();renderTree();});
 $('#expandAll').addEventListener('click',()=>{
@@ -2064,7 +2064,7 @@ $('#expandAll').addEventListener('click',()=>{
 $('#palMode').addEventListener('change',e=>{S.palMode=e.target.value;S.frameCache.clear();render();});
 $('#palInput').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();
   r.onload=()=>{const pal=parsePaletteFile(r.result,f.name);if(pal){S.customPal=pal;S.palMode='custom';$('#palMode').value='custom';$('#palName').textContent=f.name;S.frameCache.clear();render();}
-  else setStatus('Nepavyko atpažinti paletės: '+f.name,true);};r.readAsArrayBuffer(f);});
+  else setStatus('Could not recognize palette: '+f.name,true);};r.readAsArrayBuffer(f);});
 $('#animLayer').addEventListener('change',e=>{const f=S.active;if(f&&f.type==='anim'){const v=e.target.value;sliceAnimFrames(f,v==='composite'?'composite':+v);render();}});
 $('#zoom').addEventListener('input',e=>{S.zoom=+e.target.value;$('#zoomVal').textContent=S.zoom+'×';render();});
 $('#vidZoom').addEventListener('input',e=>{S.vidZoom=+e.target.value;$('#vidZoomV').textContent=S.vidZoom+'×';
@@ -2095,22 +2095,22 @@ window.addEventListener('drop',e=>{e.preventDefault();dc=0;drop.classList.remove
   const lists=fl.filter(f=>/\.(txt|lst)$/i.test(f.name)),assets=fl.filter(f=>!/\.(txt|lst)$/i.test(f.name));
   if(lists.length)loadListfile(lists[0]);
   if(assets.length){S.root=S.root||newFolder('');for(const f of assets){S.root.files.push({kind:'file',name:f.name,ext:extOf(f.name),file:f,path:'@/'+f.name});}
-    S.totalFiles=countFiles(S.root);renderTree();setStatus(assets.length+' failai įkelti (drag&drop).');}});
+    S.totalFiles=countFiles(S.root);renderTree();setStatus(assets.length+' files loaded (drag&drop).');}});
 
 $('#ekeyExtract').addEventListener('click',async()=>{
   const st=$('#ekeyStatus');
   let hex=($('#ekeyIn').value||'').toLowerCase().replace(/[^0-9a-f]/g,'');
-  if(hex.length<18){st.textContent='EKey per trumpas (reikia ≥9 baitų).';return;}
-  if(!S.cascIndex){st.textContent='Pirma įkelkite CASC aplanką.';return;}
+  if(hex.length<18){st.textContent='EKey too short (needs ≥9 bytes).';return;}
+  if(!S.cascIndex){st.textContent='Load a CASC folder first.';return;}
   const entry=S.cascIndex.get(hex.slice(0,18));
-  if(!entry){st.innerHTML='<span style="color:var(--red)">EKey nerastas indekse.</span>';return;}
-  if(!S.cascData.has(entry.fileIdx)){st.innerHTML='<span style="color:var(--red)">reikia data.'+String(entry.fileIdx).padStart(3,'0')+' (nėra kataloge)</span>';return;}
-  st.textContent='ištraukiama iš data.'+String(entry.fileIdx).padStart(3,'0')+'…';
+  if(!entry){st.innerHTML='<span style="color:var(--red)">EKey not found in the index.</span>';return;}
+  if(!S.cascData.has(entry.fileIdx)){st.innerHTML='<span style="color:var(--red)">needs data.'+String(entry.fileIdx).padStart(3,'0')+' (not in the folder)</span>';return;}
+  st.textContent='extracting from data.'+String(entry.fileIdx).padStart(3,'0')+'…';
   try{
     const buf=await readCascBlob(entry);
     const blob=new Blob([buf]);const url=URL.createObjectURL(blob);
     const a=document.createElement('a');a.href=url;a.download=hex.slice(0,16)+'.bin';a.click();URL.revokeObjectURL(url);
-    st.innerHTML='<span style="color:var(--teal)">✓ '+buf.byteLength+' B atsisiųsta</span>';
+    st.innerHTML='<span style="color:var(--teal)">✓ '+buf.byteLength+' B downloaded</span>';
   }catch(e){st.innerHTML='<span style="color:var(--red)">'+e.message+'</span>';}
 });
 /* ========================= wireframe colour tester =========================
@@ -2165,7 +2165,7 @@ async function readGameFile(path){
     const ck=S.cascRoot.get(fs);
     if(ck){ const ek=S.cascEnc.get(ck); if(ek) return await readCascByEKey(ek); }
   }
-  throw new Error('nerasta nė viename šaltinyje: '+path);
+  throw new Error('not found in any source: '+path);
 }
 function parseTbl(buf){
   const dv=new DataView(buf), b=new Uint8Array(buf), n=dv.getUint16(0,true), out=[];
@@ -2215,7 +2215,7 @@ function wfReset(){
   $('#wfSp').value=100; $('#wfSpV').textContent='100%';
   $('#wfMode').value='auto';
   wfBuildControls(); wfRender();
-  setStatus('Wireframe spalvos atstatytos į autentiškas <b>twire.pcx</b> reikšmes.');
+  setStatus('Wireframe colours reset to authentic <b>twire.pcx</b> values.');
 }
 const hex2rgb=h=>[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];
 const rgb2hex=(r,g,b)=>'#'+[r,g,b].map(x=>x.toString(16).padStart(2,'0')).join('');
@@ -2295,7 +2295,7 @@ function wfShieldLo(){ return WF.shield[wfShieldIndex()]; }
 
 async function wfLoad(){
   if(WF.ready) return;
-  showLoad('Kraunami wireframe duomenys…');
+  showLoad('Loading wireframe data…');
   try{
     const dat=await readGameFile('arr\\units.dat');
     const tbl=parseTbl(await readGameFile('rez\\stat_txt.tbl'));
@@ -2314,9 +2314,9 @@ async function wfLoad(){
       WF.twire=[]; for(let x=0;x<im.width;x++){const o=x*4; WF.twire.push(rgb2hex(im.data[o],im.data[o+1],im.data[o+2]));}
     }catch(e){ WF.twire=[]; }
     WF.ready=true;
-    $('#wfSrc').textContent='SD '+WF.sd.frameCount+' kadr.'
-      +(WF.hd?(' · HD '+WF.hd.frameCount+' kadr. ('+WF.hdPath+')'):' · HD nėra (reikia CASC — SC:R)')
-      +(WF.twire.length?(' · twire '+WF.twire.length+' įrašai'):'');
+    $('#wfSrc').textContent='SD '+WF.sd.frameCount+' frames'
+      +(WF.hd?(' · HD '+WF.hd.frameCount+' frames ('+WF.hdPath+')'):' · HD none (needs CASC — SC:R)')
+      +(WF.twire.length?(' · twire '+WF.twire.length+' entries'):'');
     hideLoad();
   }catch(e){ hideLoad(); throw e; }
 }
@@ -2421,7 +2421,7 @@ function wfDrawHd(unit){
   const cv=$('#wfHd'), info=$('#wfCellInfo'), cvc=$('#wfCells');
   const got=wfCells(unit);
   if(!got){ cv.width=cv.height=1; cvc.width=cvc.height=1; WF.cellCount=0;
-    info.textContent=WF.hd?'šiam unitui HD kadro nėra':'HD šaltinio nėra — atverkite SC:R CASC aplanką'; return; }
+    info.textContent=WF.hd?'no HD frame for this unit':'no HD source — open the SC:R CASC folder'; return; }
   const {cells,kind,size}=got;
   WF.cellCount=cells.length;
   WF.maskIdx=kind.map((k,i)=>k==='mask'?i:-1).filter(i=>i>=0);
@@ -2489,13 +2489,13 @@ function wfDrawHd(unit){
     ctx.drawImage(t,i*(size*sc+6),14,size*sc,size*sc);
     ctx.fillStyle=kind[i]==='mask'?wfCellColor(i,L):(kind[i]==='art'?'#f5b642':'#44506080');
     ctx.font='10px monospace';
-    ctx.fillText(kind[i]==='mask'?('k'+i):(kind[i]==='art'?'menas':'tušč.'),i*(size*sc+6)+2,10);
+    ctx.fillText(kind[i]==='mask'?('k'+i):(kind[i]==='art'?'art':'empty'),i*(size*sc+6)+2,10);
   });
-  info.innerHTML='langelių <b>'+cells.length+'</b> po '+size+'×'+size+' px · kaukių <b>'
-    +WF.maskIdx.length+'</b> ('+WF.maskIdx.join(',')+') · meno '+artIdx.length
+  info.innerHTML='cells <b>'+cells.length+'</b> of '+size+'×'+size+' px · masks <b>'
+    +WF.maskIdx.length+'</b> ('+WF.maskIdx.join(',')+') · art '+artIdx.length
     +(artIdx.length?(' ('+artIdx.join(',')+')'):'')
-    +' · tuščių '+kind.filter(k=>k==='empty').length
-    +'<br>rolės pagal radiusą (nested shells): Terran 4 HP · Zerg 6 HP · Protoss 4 HP + 2 skydas (išoriniausios)';
+    +' · empty '+kind.filter(k=>k==='empty').length
+    +'<br>roles by radius (nested shells): Terran 4 HP · Zerg 6 HP · Protoss 4 HP + 2 shield (outermost)';
 }
 function wfRender(){
   const u=WF.units[WF.unit]; if(!u) return;
@@ -2527,7 +2527,7 @@ function wfBuildControls(){
     const s=document.createElement('i'); s.style.background=h; s.title=i+': '+h;
     s.addEventListener('click',()=>{
       WF.pick=h; [...tw.children].forEach(c=>c.classList.remove('sel')); s.classList.add('sel');
-      setStatus('Paimta autentiška spalva <b>'+h+'</b> — spustelėk rampos langelį, kad priskirtum.');
+      setStatus('Picked authentic colour <b>'+h+'</b> — click a ramp cell to assign it.');
     });
     tw.appendChild(s);
   });
@@ -2541,9 +2541,9 @@ function wfBuildControls(){
   WF.shield.forEach((_,i)=>WF.shieldSlots.push(
     wfSlot(sh,'shield['+i+']',()=>WF.shield[i],v=>WF.shield[i]=v)));
   const m=$('#wfMisc'); m.innerHTML='';
-  wfSlot(m,'192 struktūra (tamsi)',()=>WF.structure[0],v=>WF.structure[0]=v);
-  wfSlot(m,'193 struktūra (šviesi)',()=>WF.structure[1],v=>WF.structure[1]=v);
-  wfSlot(m,'hd_line (likusios kaukės)',()=>WF.line,v=>WF.line=v);
+  wfSlot(m,'192 structure (dark)',()=>WF.structure[0],v=>WF.structure[0]=v);
+  wfSlot(m,'193 structure (light)',()=>WF.structure[1],v=>WF.structure[1]=v);
+  wfSlot(m,'hd_line (remaining masks)',()=>WF.line,v=>WF.line=v);
   wfMaskSlots();
 }
 
@@ -2554,13 +2554,13 @@ function wfMaskSlots(){
   host.innerHTML='';
   const u=WF.units[WF.unit];
   const idxs=WF.maskIdx||[];
-  if(!u||!idxs.length){ host.innerHTML='<div style="color:var(--ink-dim);font-size:10px">nėra HD kaukių (reikia CASC)</div>'; return; }
+  if(!u||!idxs.length){ host.innerHTML='<div style="color:var(--ink-dim);font-size:10px">no HD masks (needs CASC)</div>'; return; }
   const L=wfLayers(u.race);
   for(const i of idxs){
-    const row=wfSlot(host,'kaukė '+i+(WF.maskCol[i]?' (savo)':' (iš rampos)'),
+    const row=wfSlot(host,'mask '+i+(WF.maskCol[i]?' (own)':' (from ramp)'),
       ()=>wfCellColor(i,L), v=>{WF.maskCol[i]=v;}, false);
     const x=document.createElement('span');
-    x.textContent='×'; x.title='grąžinti į rampos spalvą';
+    x.textContent='×'; x.title='reset to ramp colour';
     x.style.cssText='cursor:pointer;color:var(--ink-dim);font-size:12px;padding:0 3px';
     x.addEventListener('click',ev=>{ev.stopPropagation();WF.maskCol[i]=null;wfRender();wfMaskSlots();});
     row.appendChild(x);
@@ -2575,20 +2575,20 @@ function wfMarkLive(){
   (WF.tpSlots||[]).forEach((r,i)=>r.classList.toggle('live',!isZerg&&act.includes(i)));
   (WF.shieldSlots||[]).forEach((r,i)=>r.classList.toggle('live',i===si));
   const m=wfModeFor(u.race);
-  const parts=isZerg?'įdėtieji kevalai (216–219)':'kūno dalys (208–211)';
+  const parts=isZerg?'nested shells (216–219)':'body parts (208–211)';
   $('#wfModeNote').innerHTML = m==='solid'
-    ? '<b style="color:#e0708a">vientisa (klaidinga)</b> — visa kaukė gauna <b>ramp['+wfSolidIndex()+']</b>; originale spalva keičiasi per dalis'
+    ? '<b style="color:#e0708a">solid (wrong)</b> — the whole mask gets <b>ramp['+wfSolidIndex()+']</b>; in the original the colour changes per part'
     : m==='window'
-    ? '<b style="color:var(--teal)">langas</b> — 4 gretimi ramp['+act.join(',')+']'
+    ? '<b style="color:var(--teal)">window</b> — 4 adjacent ramp['+act.join(',')+']'
     : (isZerg
-      ? '<b style="color:var(--teal)">gradientas</b> — '+parts+': sklandus žalia→geltona→oranžinė→raudona per shells (retail organic look), gradientas slenka žemyn krentant HP; dabar ramp['+act.join(',')+']'
-      : '<b style="color:var(--teal)">3 pakopos</b> — '+parts+': green/yellow/red, scattered body parts keičiasi iš išorės; dabar ramp['+act.join(',')+']');
+      ? '<b style="color:var(--teal)">gradient</b> — '+parts+': smooth green→yellow→orange→red across shells (retail organic look), the gradient slides down as HP falls; now ramp['+act.join(',')+']'
+      : '<b style="color:var(--teal)">3 stages</b> — '+parts+': green/yellow/red, scattered body parts change from the outside; now ramp['+act.join(',')+']');
 }
 function wfBuildList(){
   const host=$('#wfUnits'), q=($('#wfFilter').value||'').toLowerCase();
   host.innerHTML='';
   const order=['zerg','terran','protoss','neutral'];
-  const LBL={zerg:'Zerg',terran:'Terran',protoss:'Protoss',neutral:'Kita'};
+  const LBL={zerg:'Zerg',terran:'Terran',protoss:'Protoss',neutral:'Other'};
   for(const race of order){
     const list=WF.units.filter(u=>u.race===race&&(!q||u.name.toLowerCase().includes(q)||(''+u.id)===q));
     if(!list.length) continue;
@@ -2657,7 +2657,7 @@ function wfSyncJson(){ $('#wfJson').value=JSON.stringify(wfJsonObject(),null,2);
 
 $('#wfOpen').addEventListener('click',async()=>{
   if(!S.lastMpq&&!S.cascRoot){
-    setStatus('Pirma atverkite .mpq archyvą arba CASC aplanką — testeris ima duomenis iš jų.',true);
+    setStatus('Open a .mpq archive or CASC folder first — the tester reads its data from them.',true);
     return;
   }
   try{
@@ -2665,7 +2665,7 @@ $('#wfOpen').addEventListener('click',async()=>{
     if(WF.unit<0) WF.unit=WF.units.findIndex(u=>u.race!=='neutral');
     wfBuildControls(); wfBuildList(); wfRender();
     $('#wf').classList.add('on');
-  }catch(e){ setStatus('Wireframe testeris: '+e.message,true); }
+  }catch(e){ setStatus('Wireframe tester: '+e.message,true); }
 });
 $('#wfClose').addEventListener('click',()=>$('#wf').classList.remove('on'));
 $('#wfResetBtn').addEventListener('click',wfReset);
@@ -2734,22 +2734,22 @@ function caiSpecHtml(m){
       return c.t+': '+chkPg(c.player)+' '+c.cmp+' '+c.qty+' '+esc(un(c.unit));
     if(c.t==='CountdownTimer'||c.t==='ElapsedTime')return c.t+' '+(c.cmp||'')+' '+c.qty+'s';
     return c.t; };
-  let h='<div style="max-width:820px;text-align:left"><div class="rhead" style="margin-top:14px">📋 Spec sheet (variklio bug-diff referencija)</div>';
+  let h='<div style="max-width:820px;text-align:left"><div class="rhead" style="margin-top:14px">📋 Spec sheet (engine bug-diff reference)</div>';
   h+='<div style="font-size:12px;line-height:1.7">';
-  h+='<div><span style="color:#5fe07a">LAIMI kai:</span> '+(sp.victory.map(v=>'['+v.players.join(',')+'] '+v.conditions.map(cond).join(' & ')).join(' · ')||'—')+'</div>';
-  h+='<div><span style="color:#e0708a">PRALAIMI kai:</span> '+(sp.defeat.map(v=>'['+v.players.join(',')+'] '+(v.conditions.map(cond).join(' & ')||'Always')).join(' · ')||'—')+'</div>';
-  h+='<div style="margin-top:4px"><span style="color:var(--ink-dim)">Nuosavybės perdavimas:</span> give_units <b>'+sp.give.length+'</b> · set_alliance <b>'+sp.alliance+'</b> · create_props <b>'+sp.createProps+'</b> · rescue-žaidėjai '+(sp.rescue.length?('P'+sp.rescue.map(p=>p+1).join(',P')):'—')+'</div>';
+  h+='<div><span style="color:#5fe07a">WIN when:</span> '+(sp.victory.map(v=>'['+v.players.join(',')+'] '+v.conditions.map(cond).join(' & ')).join(' · ')||'—')+'</div>';
+  h+='<div><span style="color:#e0708a">LOSE when:</span> '+(sp.defeat.map(v=>'['+v.players.join(',')+'] '+(v.conditions.map(cond).join(' & ')||'Always')).join(' · ')||'—')+'</div>';
+  h+='<div style="margin-top:4px"><span style="color:var(--ink-dim)">Ownership transfer:</span> give_units <b>'+sp.give.length+'</b> · set_alliance <b>'+sp.alliance+'</b> · create_props <b>'+sp.createProps+'</b> · rescue-players '+(sp.rescue.length?('P'+sp.rescue.map(p=>p+1).join(',P')):'—')+'</div>';
   for(const g of sp.give)h+='<div style="font:11px ui-monospace,monospace;color:#c8b878">  GIVE '+g.from+'→'+g.to+' : '+esc(un(g.unit))+' ×'+g.count+'</div>';
   if(sp.alliance===0&&sp.give.length===0&&sp.rescue.length)
-    h+='<div style="color:var(--ink-dim);font-size:10px">→ nėra alliance/give — kontrolė pereina per RESCUE OWNR (+create). Variklis turi tai modeliuoti kaip control-transfer, ne ally.</div>';
+    h+='<div style="color:var(--ink-dim);font-size:10px">→ no alliance/give — control passes via RESCUE OWNR (+create). The engine must model this as a control-transfer, not an ally.</div>';
   h+='</div></div>';
   return h;
 }
 function caiTriggersHtml(m){
   const tg=m.triggersFull; if(!tg||!tg.length)return '';
   const esc=t=>(t||'').replace(/[<&]/g,c=>c==='<'?'&lt;':'&amp;');
-  let h='<div style="max-width:900px;text-align:left"><div class="rhead" style="margin-top:14px">🔧 Visi triggeriai — IF/DO ('+tg.length+') <span style="color:var(--ink-dim);font-size:10px">(pilnas korpusas, kaip trigger_corpus.py)</span></div>';
-  h+='<details><summary style="cursor:pointer;color:var(--teal);font-size:12px;margin:4px 0">rodyti / slėpti</summary>';
+  let h='<div style="max-width:900px;text-align:left"><div class="rhead" style="margin-top:14px">🔧 All triggers — IF/DO ('+tg.length+') <span style="color:var(--ink-dim);font-size:10px">(full corpus, like trigger_corpus.py)</span></div>';
+  h+='<details><summary style="cursor:pointer;color:var(--teal);font-size:12px;margin:4px 0">show / hide</summary>';
   for(const t of tg){
     h+='<div style="margin:6px 0;border-left:2px solid var(--edge);padding-left:8px">';
     h+='<div style="color:#567;font:11px ui-monospace,monospace">T'+t.index+' · P'+t.players.slice(0,6).join(',')+'</div>';
@@ -2765,31 +2765,31 @@ function caiBotHtml(m){
   if(!b.attacks.length&&!b.builds.length&&!x.has)return '';
   const esc=t=>(t||'').replace(/[<&]/g,c=>c==='<'?'&lt;':'&amp;');
   const chips=arr=>arr.slice(0,12).map(r=>'<span style="color:#c8b878">'+esc(r.name)+'</span>×'+r.count).join('  ')||'—';
-  let h='<div style="max-width:820px;text-align:left"><div class="rhead" style="margin-top:14px">🤖 Boto elgesys (iš AI script\'ų — bytecode)</div>';
+  let h='<div style="max-width:820px;text-align:left"><div class="rhead" style="margin-top:14px">🤖 Bot behaviour (from AI scripts — bytecode)</div>';
   h+='<div style="font:12px ui-monospace,monospace;line-height:1.7">';
-  h+='<div><span style="color:var(--teal)">ataka:</span> '+chips(b.attacks)+'</div>';
-  if(b.builds.length)h+='<div><span style="color:var(--teal)">statyba:</span> '+chips(b.builds)+'</div>';
-  if(b.trains.length)h+='<div><span style="color:var(--teal)">treniruoja:</span> '+chips(b.trains)+'</div>';
+  h+='<div><span style="color:var(--teal)">attack:</span> '+chips(b.attacks)+'</div>';
+  if(b.builds.length)h+='<div><span style="color:var(--teal)">build:</span> '+chips(b.builds)+'</div>';
+  if(b.trains.length)h+='<div><span style="color:var(--teal)">trains:</span> '+chips(b.trains)+'</div>';
   h+='</div>';
   if(x.has){
-    h+='<div class="rhead" style="margin-top:14px">📖 Walkthrough kryžminė nuoroda — '+esc(x.e.name)+'</div>';
+    h+='<div class="rhead" style="margin-top:14px">📖 Walkthrough cross-reference — '+esc(x.e.name)+'</div>';
     h+='<div style="font-size:12px;line-height:1.7">';
-    h+='<div><span style="color:var(--ink-dim)">tikslas:</span> '+esc(x.e.objective)+'</div>';
-    h+='<div><span style="color:var(--ink-dim)">priešo frakcija:</span> '+esc(x.e.factions.join(', '))+'</div>';
-    h+='<div><span style="color:var(--ink-dim)">bangų pobūdis:</span> '+esc(x.e.pattern)+'</div>';
-    h+='<div style="margin-top:4px"><span style="color:#5fe07a">✓ patvirtinta (abu sutaria):</span> '+(x.confirmed.map(esc).join(', ')||'—')+'</div>';
-    h+='<div><span style="color:#e8c828">script→ (bot fielduoja, gide nepaminėta):</span> '+(x.script_only.map(esc).join(', ')||'—')+'</div>';
-    h+='<div><span style="color:#e0708a">→walkthrough (gide matyta, AI ataka neturi — trigger/gynyba):</span> '+(x.walkthrough_only.map(esc).join(', ')||'—')+'</div>';
-    h+='<div style="color:var(--ink-dim);font-size:10px;margin-top:4px">šaltiniai: '+esc(x.e.sources.join(', '))+' · faktai, ne prozos kopija</div>';
+    h+='<div><span style="color:var(--ink-dim)">objective:</span> '+esc(x.e.objective)+'</div>';
+    h+='<div><span style="color:var(--ink-dim)">enemy faction:</span> '+esc(x.e.factions.join(', '))+'</div>';
+    h+='<div><span style="color:var(--ink-dim)">wave pattern:</span> '+esc(x.e.pattern)+'</div>';
+    h+='<div style="margin-top:4px"><span style="color:#5fe07a">✓ confirmed (both agree):</span> '+(x.confirmed.map(esc).join(', ')||'—')+'</div>';
+    h+='<div><span style="color:#e8c828">script→ (bot fields it, not mentioned in the guide):</span> '+(x.script_only.map(esc).join(', ')||'—')+'</div>';
+    h+='<div><span style="color:#e0708a">→walkthrough (seen in guide, no AI attack — trigger/defense):</span> '+(x.walkthrough_only.map(esc).join(', ')||'—')+'</div>';
+    h+='<div style="color:var(--ink-dim);font-size:10px;margin-top:4px">sources: '+esc(x.e.sources.join(', '))+' · facts, not a prose copy</div>';
     h+='</div>';
   } else {
-    h+='<div style="color:var(--ink-dim);font-size:11px;margin-top:8px">📖 Šiai misijai walkthrough faktų dar neįvesta (žr. assets/campaign_walkthroughs.json) — rodomas tik script-derived elgesys.</div>';
+    h+='<div style="color:var(--ink-dim);font-size:11px;margin-top:8px">📖 No walkthrough facts entered for this mission yet (see assets/campaign_walkthroughs.json) — only script-derived behaviour is shown.</div>';
   }
   return h+'</div>';
 }
 async function caiLoad(){
   if(CAI.ready)return;
-  showLoad('Kraunami AI scriptai + kampanijos…');
+  showLoad('Loading AI scripts + campaigns…');
   try{
     CAI.ai={}; CAI.byId={};
     for(const nm of ['scripts\\aiscript.bin','scripts\\bwscript.bin']){
@@ -2819,7 +2819,7 @@ async function caiLoad(){
     CAI.ready=true;
     const nsc=Object.values(CAI.ai).reduce((a,f)=>a+f.scripts.length,0);
     const withAi=CAI.missions.filter(m=>m.links.length).length;
-    $('#caiSrc').textContent=nsc+' scriptai · '+CAI.missions.length+' misijos ('+withAi+' su AI)';
+    $('#caiSrc').textContent=nsc+' scripts · '+CAI.missions.length+' missions ('+withAi+' with AI)';
     hideLoad();
   }catch(e){hideLoad();throw e;}
 }
@@ -2827,18 +2827,18 @@ function caiBuildList(){
   const q=($('#caiFilter').value||'').toLowerCase(), host=$('#caiList'); host.innerHTML='';
   const mk=(label,cb,on)=>{const el=document.createElement('div');el.className='mrow'+(on?' on':'');el.textContent=label;el.onclick=cb;host.appendChild(el);};
   const hd=t=>{const el=document.createElement('div');el.className='rhead';el.textContent=t;host.appendChild(el);};
-  hd('Kampanijų misijos ('+CAI.missions.length+')');
+  hd('Campaign missions ('+CAI.missions.length+')');
   if(!CAI.missions.length){
     const el=document.createElement('div'); el.style.cssText='padding:10px;color:var(--ink-dim);font-size:11px;line-height:1.6';
-    el.innerHTML='Nerasta misijų. Kampanijos guli DIDELIUOSE archyvuose (StarCraft.mpq / BroodWar.mpq), o aiscript.bin — StarDat.mpq. Atverk visą <b>BW instaliacijos aplanką</b> („Atverti aplanką"), kad būtų prieinami VISI .mpq (arba SC:R CASC aplanką).';
+    el.innerHTML='No missions found. Campaigns live in the LARGE archives (StarCraft.mpq / BroodWar.mpq), and aiscript.bin — StarDat.mpq. Open the whole <b>BW installation folder</b> („Open folder"), so ALL .mpq become available (or the SC:R CASC folder).';
     host.appendChild(el); return;
   }
   for(const m of CAI.missions){ if(q&&!m.fmtLabel.toLowerCase().includes(q))continue;
     const nb=(m.briefing||[]).reduce((a,b)=>a+b.n_lines,0);
     const tag=[m.links.length?m.links.length+' AI':'',m.commands.length?m.commands.length+' cmd':'',nb?nb+' rep':''].filter(Boolean).join(' · ')||'—';
     mk(m.fmtLabel+'  ('+tag+')',()=>{CAI.sel={t:'mission',m};caiRender();},CAI.sel&&CAI.sel.m===m); }
-  if(CAI.missionsOnly)return;   // dedicated "Kampanijų misijos" view hides the raw AI-script list
-  hd('AI scriptai');
+  if(CAI.missionsOnly)return;   // dedicated "Campaign missions" view hides the raw AI-script list
+  hd('AI scripts');
   for(const src in CAI.ai) for(const s of CAI.ai[src].scripts){ if(q&&!(s.id.toLowerCase().includes(q)))continue;
     mk(s.id+'  ('+s.ins.length+' instr)',()=>{CAI.sel={t:'script',s,src};caiRender();},CAI.sel&&CAI.sel.s===s); }
 }
@@ -2846,12 +2846,12 @@ function caiFmtMs(ms){ return (ms/60000|0)+':'+String((ms%60000)/1000).padStart(
 function caiBriefingHtml(m){
   const bs=m.briefing||[]; if(!bs.length||!bs.some(b=>b.events.length))return '';
   const un=CAI.uname||(u=>'unit '+u);
-  let h='<div style="max-width:820px;text-align:left"><div class="rhead" style="margin-top:14px">🎙 Briefing (dialogo timeline)</div>';
+  let h='<div style="max-width:820px;text-align:left"><div class="rhead" style="margin-top:14px">🎙 Briefing (dialogue timeline)</div>';
   for(const b of bs){ if(!b.events.length)continue;
-    h+='<div style="color:var(--ink-dim);font-size:11px;margin:2px 0">'+b.n_lines+' replikos · '+caiFmtMs(b.total_ms)+'</div>';
+    h+='<div style="color:var(--ink-dim);font-size:11px;margin:2px 0">'+b.n_lines+' lines · '+caiFmtMs(b.total_ms)+'</div>';
     for(const e of b.events){ let x='';
       if(e.action==='Transmission')x='<span style="color:#c8b878">'+un(e.speaker_unit)+'</span> <span style="color:var(--ink)">'+(e.text||'').replace(/[<&]/g,c=>c==='<'?'&lt;':'&amp;').slice(0,60)+'</span> <span style="color:#5f88c0">'+(e.wav||'').split('\\').pop()+'</span> <span style="color:var(--ink-dim)">'+(e.dur_ms/1000).toFixed(1)+'s</span>';
-      else if(e.action==='ShowPortrait')x='<span style="color:#8fd15a">portretas: '+un(e.portrait_unit)+'</span>';
+      else if(e.action==='ShowPortrait')x='<span style="color:#8fd15a">portrait: '+un(e.portrait_unit)+'</span>';
       else if(e.text)x='<span style="color:var(--ink-dim)">'+(e.text||'').replace(/[<&]/g,c=>c==='<'?'&lt;':'&amp;').slice(0,60)+'</span>';
       h+='<div style="font:11px ui-monospace,monospace"><span style="color:#567">'+caiFmtMs(e.t_ms)+'</span> <span style="color:var(--teal)">'+e.action+'</span> '+x+'</div>';
     } }
@@ -2861,14 +2861,14 @@ function caiCommandsHtml(m){
   const cs=m.commands||[]; if(!cs.length)return '';
   const un=CAI.uname||(u=>'unit '+u);
   const kinds={}; for(const c of cs)kinds[c.kind]=(kinds[c.kind]||0)+1;
-  let h='<div style="max-width:820px;text-align:left"><div class="rhead" style="margin-top:14px">🎯 Unit veiksmai iš triggerių ('+cs.length+': '+Object.entries(kinds).map(([k,v])=>k+' '+v).join(', ')+')</div>';
+  let h='<div style="max-width:820px;text-align:left"><div class="rhead" style="margin-top:14px">🎯 Unit actions from triggers ('+cs.length+': '+Object.entries(kinds).map(([k,v])=>k+' '+v).join(', ')+')</div>';
   for(const c of cs.slice(0,120)){ let tgt='';
     if(c.kind==='order')tgt=' → <span style="color:#e8c828">'+c.order+'</span> '+(c.target_loc_name||c.target_loc);
     else if(c.kind==='move')tgt=' → '+(c.dest_loc_name||c.dest_loc);
     else if(c.kind==='give')tgt=' → player '+c.to_player;
     h+='<div style="font:11px ui-monospace,monospace">T'+c.trigger+' P'+c.player+' <span style="color:var(--teal)">'+c.action+'</span> <span style="color:#c8b878">'+un(c.unit)+'</span>'+(c.count!==undefined?' ×'+c.count:'')+' @'+(c.source_loc_name||c.source_loc)+tgt+'</div>';
   }
-  if(cs.length>120)h+='<div style="color:var(--ink-dim);font-size:10px">…dar '+(cs.length-120)+'</div>';
+  if(cs.length>120)h+='<div style="color:var(--ink-dim);font-size:10px">…'+(cs.length-120)+' more</div>';
   return h+'</div>';
 }
 function caiHeroesHtml(m){
@@ -2877,7 +2877,7 @@ function caiHeroesHtml(m){
   for(const p of (m.placed||[])) if(CAI.heroSet.has(p.unit)){ const h=hu[p.unit]=hu[p.unit]||{placed:0,cmd:0,owners:new Set()}; h.placed++; h.owners.add(p.owner); }
   for(const c of (m.commands||[])) if(CAI.heroSet.has(c.unit)){ const h=hu[c.unit]=hu[c.unit]||{placed:0,cmd:0,owners:new Set()}; h.cmd++; }
   const ids=Object.keys(hu); if(!ids.length)return '';
-  let h='<div style="max-width:820px;text-align:left"><div class="rhead" style="margin-top:14px">⭐ Herojai ('+ids.length+')</div>';
+  let h='<div style="max-width:820px;text-align:left"><div class="rhead" style="margin-top:14px">⭐ Heroes ('+ids.length+')</div>';
   for(const id of ids){ const v=hu[id];
     h+='<div style="font:12px ui-monospace,monospace"><span style="color:#e8c828">'+un(+id)+'</span> <span style="color:var(--ink-dim)">'
       +(v.placed?'placed×'+v.placed+(v.owners.size?' (owner '+[...v.owners].join(',')+')':''):'')+(v.cmd?(v.placed?' · ':'')+'trigger×'+v.cmd:'')+'</span></div>'; }
@@ -2886,16 +2886,16 @@ function caiHeroesHtml(m){
 function caiRender(){
   caiBuildList();
   const d=$('#caiDetail');
-  if(!CAI.sel){d.innerHTML='<div style="color:var(--ink-dim);padding:20px">Pasirinkite misiją (kampanijos AI sąsajos) arba scriptą (disasm + semantika + scaler).</div>';return;}
+  if(!CAI.sel){d.innerHTML='<div style="color:var(--ink-dim);padding:20px">Select a mission (campaign AI linkage) or a script (disasm + semantics + scaler).</div>';return;}
   if(CAI.sel.t==='mission'){
     let h=renderChkHtml(CAI.sel.m);
-    h+='<div style="max-width:820px;text-align:left"><div class="rhead" style="margin-top:12px">Script → lentelė + shared</div>';
+    h+='<div style="max-width:820px;text-align:left"><div class="rhead" style="margin-top:12px">Script → table + shared</div>';
     const seen={};
     for(const l of CAI.sel.m.links){ if(seen[l.script])continue; seen[l.script]=1;
       const src=CAI.byId[l.script]; const shared=(CAI.usage[l.script]||[]).filter((v,i,a)=>a.indexOf(v)===i);
       h+='<div style="font:12px ui-monospace,monospace"><span style="color:#c8b878">'+l.script+'</span> '
-        +(src?'<span style="color:#5fe07a">✓ '+src+'</span>':'<span style="color:#e0708a">nerastas lentelėje</span>')
-        +(shared.length>1?' <span style="color:var(--ink-dim)">— shared '+shared.length+' misijose (klonuok prieš redaguojant)</span>':'')+'</div>'; }
+        +(src?'<span style="color:#5fe07a">✓ '+src+'</span>':'<span style="color:#e0708a">not found in table</span>')
+        +(shared.length>1?' <span style="color:var(--ink-dim)">— shared '+shared.length+' missions (clone before editing)</span>':'')+'</div>'; }
     h+='</div>';
     h+=caiSpecHtml(CAI.sel.m);
     h+=caiBotHtml(CAI.sel.m);
@@ -2908,17 +2908,17 @@ function caiRender(){
 }
 function caiHasSource(){ return !!(S.lastMpq||S.cascRoot||collectMpqNodes().length); }
 $('#caiOpen').addEventListener('click',async()=>{
-  if(!caiHasSource()){ setStatus('Pirma atverkite BW instaliacijos <b>aplanką</b> (visi .mpq) arba SC:R CASC — Campaign AI ima aiscript.bin + kampanijas iš jų.',true); return; }
+  if(!caiHasSource()){ setStatus('Open the BW installation <b>folder</b> first (all .mpq) or SC:R CASC — Campaign AI reads aiscript.bin + campaigns from them.',true); return; }
   try{ CAI.missionsOnly=false; await caiLoad(); caiRender(); $('#cai').classList.add('on'); }
   catch(e){ setStatus('Campaign AI: '+e.message,true); }
 });
-// Dedicated "Kampanijų misijos": same panel, mission list only, first mission auto-selected.
+// Dedicated "Campaign missions": same panel, mission list only, first mission auto-selected.
 $('#campOpen').addEventListener('click',async()=>{
-  if(!caiHasSource()){ setStatus('Pirma atverkite BW instaliacijos <b>aplanką</b> (visi .mpq: StarCraft/BroodWar+StarDat) arba SC:R CASC — misijos filtruojamos iš jų.',true); return; }
+  if(!caiHasSource()){ setStatus('Open the BW installation <b>folder</b> first (all .mpq: StarCraft/BroodWar+StarDat) or SC:R CASC — missions are filtered from them.',true); return; }
   try{ CAI.missionsOnly=true; await caiLoad();
     if(!(CAI.sel&&CAI.sel.t==='mission')&&CAI.missions.length)CAI.sel={t:'mission',m:CAI.missions[0]};
     caiRender(); $('#cai').classList.add('on'); }
-  catch(e){ setStatus('Kampanijų misijos: '+e.message,true); }
+  catch(e){ setStatus('Campaign missions: '+e.message,true); }
 });
 $('#caiClose').addEventListener('click',()=>$('#cai').classList.remove('on'));
 $('#caiFilter').addEventListener('input',caiBuildList);
@@ -3032,28 +3032,28 @@ function repCommandLog(rp,cmds){const un=REP.uname;const who={};for(const p of r
     lines.push(repFrameTime(c.frame).padEnd(9)+' '+tag.padEnd(14)+' '+c.name.padEnd(18)+' '+det);}
   return lines;}
 async function repLoad(buf){
-  showLoad('Dekoduojamas replay…');
+  showLoad('Decoding replay…');
   try{
     REP.uname=(u=>'unit '+u);
     try{const tb=await readGameFile('rez\\stat_txt.tbl');const st=parseTbl(tb);REP.uname=(u=>st[u]||('unit '+u));}catch(e){}
     const rp=await repParse(buf);const [cmds,consumed]=repDecode(rp.cmds);
     REP.parsed=rp;REP.cmds=cmds;REP.analysis=repAnalyze(rp,cmds);REP.consumed=consumed;
     REP.fname=(REP.fname||'replay');
-    $('#repSrc').textContent=(rp.remastered?'SC:R':'classic')+' · '+cmds.length+' komandų · consume '+consumed+'/'+rp.cmds.length+(consumed===rp.cmds.length?' ✓':' ⚠');
+    $('#repSrc').textContent=(rp.remastered?'SC:R':'classic')+' · '+cmds.length+' commands · consume '+consumed+'/'+rp.cmds.length+(consumed===rp.cmds.length?' ✓':' ⚠');
     $('#repTransBtn').style.display=rp.remastered?'':'none';
     hideLoad();repRender();
-  }catch(e){hideLoad();$('#repDetail').innerHTML='<div style="color:#e0708a;padding:20px">Klaida: '+e.message+'</div>';}
+  }catch(e){hideLoad();$('#repDetail').innerHTML='<div style="color:#e0708a;padding:20px">Error: '+e.message+'</div>';}
 }
 function repRender(){
-  const a=REP.analysis;if(!a){$('#repDetail').innerHTML='<div style="color:var(--ink-dim);padding:20px">Atverk .rep failą.</div>';return;}
+  const a=REP.analysis;if(!a){$('#repDetail').innerHTML='<div style="color:var(--ink-dim);padding:20px">Open a .rep file.</div>';return;}
   const esc=t=>(t||'').replace(/[<&]/g,c=>c==='<'?'&lt;':'&amp;');
   // left: summary
   let L='<div class="rhead">'+esc(a.map||'—')+'</div><div style="font-size:12px;line-height:1.7">'+
-    '<div><span style="color:var(--ink-dim)">tipas:</span> '+(a.remastered?'SC:R (seRS)':'klasikinis (reRS)')+'</div>'+
+    '<div><span style="color:var(--ink-dim)">type:</span> '+(a.remastered?'SC:R (seRS)':'classic (reRS)')+'</div>'+
     '<div><span style="color:var(--ink-dim)">matchup:</span> '+esc(a.matchup)+'</div>'+
-    '<div><span style="color:var(--ink-dim)">trukmė:</span> '+a.duration+' ('+a.frames+' kadr.)</div>'+
-    (a.firstLeave?'<div><span style="color:var(--ink-dim)">pirmas išėjo:</span> <span style="color:#e0708a">'+esc(a.firstLeave)+'</span></div>':'')+'</div>';
-  L+='<div class="rhead" style="margin-top:12px">Žaidėjai</div>';
+    '<div><span style="color:var(--ink-dim)">duration:</span> '+a.duration+' ('+a.frames+' frames)</div>'+
+    (a.firstLeave?'<div><span style="color:var(--ink-dim)">first left:</span> <span style="color:#e0708a">'+esc(a.firstLeave)+'</span></div>':'')+'</div>';
+  L+='<div class="rhead" style="margin-top:12px">Players</div>';
   for(const p of a.players){ if(!p.bo.length&&p.apm<10)continue;
     L+='<div style="font:12px ui-monospace,monospace;margin:4px 0"><span style="color:#c8b878">'+esc(p.name)+'</span> '+esc(p.race)+
       ' <span style="color:var(--teal)">APM '+p.apm+'</span> EAPM '+p.eapm+(p.leftT?' <span style="color:#e0708a">LEFT '+p.leftT+'</span>':'')+'</div>';}
@@ -3061,18 +3061,18 @@ function repRender(){
   // right: build orders or command log
   if(REP.showLog){
     const lines=repCommandLog(REP.parsed,REP.cmds);
-    $('#repDetail').innerHTML='<div class="rhead">Komandų žurnalas ('+lines.length+')</div><div class="repline">'+
-      lines.slice(0,4000).map(esc).join('\n')+(lines.length>4000?'\n… dar '+(lines.length-4000):'')+'</div>';
+    $('#repDetail').innerHTML='<div class="rhead">Command log ('+lines.length+')</div><div class="repline">'+
+      lines.slice(0,4000).map(esc).join('\n')+(lines.length>4000?'\n… '+(lines.length-4000)+' more':'')+'</div>';
     return;
   }
   let R='';
   for(const p of a.players){ if(!p.bo.length&&p.apm<10)continue;
     R+='<div class="rhead" style="margin-top:8px">'+esc(p.name)+' ('+esc(p.race)+') — build order</div>';
     R+='<div class="repline">'+p.bo.slice(0,40).map(b=>b.t.padEnd(9)+' '+b.action.padEnd(15)+' '+esc(b.unit)).join('\n')+'</div>';
-    if(p.units.length){R+='<div style="font-size:11px;color:var(--ink-dim);margin:4px 0 8px">Pagaminta: '+
+    if(p.units.length){R+='<div style="font-size:11px;color:var(--ink-dim);margin:4px 0 8px">Produced: '+
       p.units.slice(0,14).map(([n,c])=>esc(n.split(' ').pop())+'×'+c).join(', ')+'</div>';}
   }
-  $('#repDetail').innerHTML=R||'<div style="color:var(--ink-dim);padding:20px">Nėra gamybos veiksmų.</div>';
+  $('#repDetail').innerHTML=R||'<div style="color:var(--ink-dim);padding:20px">No production actions.</div>';
 }
 /* SC:R (seRS) -> classic 1.16.1 (reRS) transcode — JS twin of tools/rep/rep_transcode.py.
    Re-container with UNCOMPRESSED chunks (no PKWARE compressor needed) + remap the _121
@@ -3120,52 +3120,52 @@ $('#repLogBtn').addEventListener('click',()=>{REP.showLog=!REP.showLog;repRender
 $('#repInput').addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;
   REP.showLog=false;REP.fname=f.name.replace(/\.rep$/i,'');repLoad(await f.arrayBuffer());});
 $('#repTransBtn').addEventListener('click',()=>{
-  if(!REP.parsed||!REP.parsed.remastered){setStatus('Transkodavimas tik SC:R (seRS) replay\'ams.',true);return;}
+  if(!REP.parsed||!REP.parsed.remastered){setStatus('Transcoding only for SC:R (seRS) replays.',true);return;}
   try{ const out=repTranscode(REP.parsed);
     const url=URL.createObjectURL(new Blob([out],{type:'application/octet-stream'}));
     dl(url,(REP.fname||'replay')+'.116.rep');URL.revokeObjectURL(url);
-    setStatus('Konvertuota į 1.16.1: <b>'+(REP.fname||'replay')+'.116.rep</b> ('+out.length+' B). BW paleidimą patikrink pats.');
-  }catch(e){setStatus('Transkodavimo klaida: '+e.message,true);}
+    setStatus('Converted to 1.16.1: <b>'+(REP.fname||'replay')+'.116.rep</b> ('+out.length+' B). Test the BW launch yourself.');
+  }catch(e){setStatus('Transcoding error: '+e.message,true);}
 });
 
-/* ========================= Žinynas: cheatai (wiki) =========================
-   Statinė biblioteka — twin of assets/cheats.json. Public single-player kodai. */
+/* ========================= Reference: cheats (wiki) =========================
+   Static library — twin of assets/cheats.json. Public single-player codes. */
 const CHEATS=[
- {code:"show me the money",effect:"10 000 mineralų + 10 000 vespene dujų",cat:"resursai"},
- {code:"whats mine is mine",effect:"Nemokami mineralai (prideda)",cat:"resursai"},
- {code:"breathe deep",effect:"Nemokamos vespene dujos (prideda)",cat:"resursai"},
- {code:"power overwhelming",effect:"Dievo režimas — tavo unitai/pastatai nepažeidžiami",cat:"kova"},
- {code:"operation cwal",effect:"Beveik momentinė statyba/treniruotė/upgrade",cat:"gamyba"},
- {code:"the gathering",effect:"Neribota energija — burtai nekainuoja manos",cat:"kova"},
- {code:"something for nothing",effect:"Suteikia visus upgrade'us (ataka/šarvai/…)",cat:"tech"},
- {code:"medieval man",effect:"Nemokami upgrade'ai — be kainos",cat:"tech"},
- {code:"modify the phase variance",effect:"Leidžia statyti visus pastatus (ignoruoja tech-medį)",cat:"tech"},
- {code:"food for thought",effect:"Statyti unitus virš supply/psi/control limito",cat:"gamyba"},
- {code:"black sheep wall",effect:"Atskleidžia visą žemėlapį (pašalina neištirtą rūką)",cat:"matomumas"},
- {code:"war aint what it used to be",effect:"Išjungia karo rūką (nuolatinis ištirtų vietų matomumas)",cat:"matomumas"},
- {code:"there is no cow level",effect:"Iškart laimi (užbaigia) dabartinę misiją",cat:"misija"},
- {code:"game over man",effect:"Baigia žaidimą pralaimėjimu",cat:"misija"},
- {code:"staying alive",effect:"Išjungia pergalės/pralaimėjimo sąlygas — misija nesibaigia",cat:"misija"},
- {code:"ophelia",effect:"Įjungia misijų peršokimą; tada įvesk misijos vardą (pvz. 'terran5', 'zerg3', 'protoss7')",cat:"misija"},
- {code:"radio free zerg",effect:"Paleidžia paslėptą Zerg dainą — veikia tik žaidžiant Zerg",cat:"pramoga"}];
+ {code:"show me the money",effect:"10 000 minerals + 10 000 vespene gas",cat:"resources"},
+ {code:"whats mine is mine",effect:"Free minerals (adds)",cat:"resources"},
+ {code:"breathe deep",effect:"Free vespene gas (adds)",cat:"resources"},
+ {code:"power overwhelming",effect:"God mode — your units/buildings are invulnerable",cat:"combat"},
+ {code:"operation cwal",effect:"Near-instant build/train/upgrade",cat:"production"},
+ {code:"the gathering",effect:"Unlimited energy — spells cost no mana",cat:"combat"},
+ {code:"something for nothing",effect:"Grants all upgrades (attack/armor/…)",cat:"tech"},
+ {code:"medieval man",effect:"Free upgrades — no cost",cat:"tech"},
+ {code:"modify the phase variance",effect:"Lets you build all buildings (ignores the tech tree)",cat:"tech"},
+ {code:"food for thought",effect:"Build units above the supply/psi/control limit",cat:"production"},
+ {code:"black sheep wall",effect:"Reveals the whole map (removes the unexplored fog)",cat:"visibility"},
+ {code:"war aint what it used to be",effect:"Disables the fog of war (permanent visibility of explored areas)",cat:"visibility"},
+ {code:"there is no cow level",effect:"Instantly wins (completes) the current mission",cat:"mission"},
+ {code:"game over man",effect:"Ends the game in a loss",cat:"mission"},
+ {code:"staying alive",effect:"Disables the victory/defeat conditions — the mission never ends",cat:"mission"},
+ {code:"ophelia",effect:"Enables mission skipping; then type the mission name (e.g. 'terran5', 'zerg3', 'protoss7')",cat:"mission"},
+ {code:"radio free zerg",effect:"Plays a hidden Zerg song — only works while playing Zerg",cat:"fun"}];
 function cheatRender(){
   const q=($('#cheatFilter').value||'').toLowerCase();
   const rows=CHEATS.filter(c=>!q||c.code.includes(q)||c.effect.toLowerCase().includes(q)||c.cat.includes(q));
   const esc=t=>(t||'').replace(/[<&]/g,c=>c==='<'?'&lt;':'&amp;');
-  let h='<div style="color:var(--ink-dim);font-size:11px;margin-bottom:10px">Single-player: paspausk Enter, įvesk kodą, Enter dar kartą. Case-insensitive. Multiplayeryje cheatų NĖRA.</div>';
-  h+='<table><thead><tr><th>Kodas</th><th>Efektas</th><th>Kategorija</th></tr></thead><tbody>';
+  let h='<div style="color:var(--ink-dim);font-size:11px;margin-bottom:10px">Single-player: press Enter, type the code, Enter again. Case-insensitive. There are NO cheats in multiplayer.</div>';
+  h+='<table><thead><tr><th>Code</th><th>Effect</th><th>Category</th></tr></thead><tbody>';
   for(const c of rows) h+='<tr><td><code>'+esc(c.code)+'</code></td><td>'+esc(c.effect)+'</td><td>'+esc(c.cat)+'</td></tr>';
   h+='</tbody></table>';
-  h+='<div style="color:var(--ink-dim);font-size:10px;margin-top:8px">Šaltiniai: gamefaqs.gamespot.com · starcraft.fandom.com · staredit-network.fandom.com (assets/cheats.json).</div>';
-  $('#cheatBody').innerHTML=h; $('#cheatSrc').textContent=rows.length+'/'+CHEATS.length+' kodų';
+  h+='<div style="color:var(--ink-dim);font-size:10px;margin-top:8px">Sources: gamefaqs.gamespot.com · starcraft.fandom.com · staredit-network.fandom.com (assets/cheats.json).</div>';
+  $('#cheatBody').innerHTML=h; $('#cheatSrc').textContent=rows.length+'/'+CHEATS.length+' codes';
 }
 $('#cheatOpen').addEventListener('click',()=>{ $('#cheat').classList.add('on'); cheatRender(); });
 $('#cheatClose').addEventListener('click',()=>$('#cheat').classList.remove('on'));
 $('#cheatFilter').addEventListener('input',cheatRender);
 
-/* ================= Kampanijų walkthrough (spreadsheet) =================
-   Viena eilutė per misiją; stulpeliai iš oracle laukų (spec/briefing/bot/heroes).
-   Reuses CAI (loads all campaign missions). Klik → pilna misija Campaign analizatoriuje.
+/* ================= Campaign walkthrough (spreadsheet) =================
+   One row per mission; columns from the oracle fields (spec/briefing/bot/heroes).
+   Reuses CAI (loads all campaign missions). Click → full mission in the Campaign analyzer.
    CSV eksportas = spreadsheet. */
 function cwtRows(){
   const rows=[];
@@ -3203,14 +3203,14 @@ function cwtRender(){
   const rows=cwtRows().filter(r=>!q||r.mission.toLowerCase().includes(q)||r.objectives.toLowerCase().includes(q));
   CWT.rows=rows;
   let h='<table><thead><tr>'+
-    ['Misija','Tikslai','LAIMI kai','PRALAIMI kai','Perdavimas','Herojai','Priešo ataka','AI','Cmd','Repl.'].map(x=>'<th>'+x+'</th>').join('')+
+    ['Mission','Objectives','WIN when','LOSE when','Transfer','Heroes','Enemy attack','AI','Cmd','Repl.'].map(x=>'<th>'+x+'</th>').join('')+
     '</tr></thead><tbody>';
   for(let i=0;i<rows.length;i++){ const r=rows[i];
     h+='<tr data-i="'+i+'" style="cursor:pointer">'+
       ['mission','objectives','win','lose','transfer','heroes','attack','ai','cmds','brief'].map(k=>'<td>'+esc(r[k])+'</td>').join('')+'</tr>';
   }
   h+='</tbody></table>';
-  $('#cwtBody').innerHTML=h; $('#cwtSrc').textContent=rows.length+' misijos · klik eilutę → pilna misija';
+  $('#cwtBody').innerHTML=h; $('#cwtSrc').textContent=rows.length+' missions · click a row → full mission';
   $('#cwtBody').querySelectorAll('tr[data-i]').forEach(tr=>tr.onclick=()=>{
     const m=CAI.missions.find(x=>x.fmtLabel===rows[+tr.dataset.i].mission);
     if(m){ CAI.sel={t:'mission',m}; CAI.missionsOnly=false; $('#cwt').classList.remove('on'); $('#cai').classList.add('on'); caiRender(); }
@@ -3223,10 +3223,10 @@ function cwtCsv(){
   const lines=[cols.join(',')].concat((CWT.rows||[]).map(r=>cols.map(k=>esc(r[k])).join(',')));
   const url=URL.createObjectURL(new Blob(['﻿'+lines.join('\r\n')],{type:'text/csv'}));
   dl(url,'campaign-walkthrough.csv'); URL.revokeObjectURL(url);
-  setStatus('Eksportuota <b>campaign-walkthrough.csv</b> ('+(CWT.rows||[]).length+' misijos).');
+  setStatus('Eksportuota <b>campaign-walkthrough.csv</b> ('+(CWT.rows||[]).length+' missions).');
 }
 $('#cwtOpen').addEventListener('click',async()=>{
-  if(!caiHasSource()){ setStatus('Pirma atverk BW instaliacijos aplanką arba SC:R CASC.',true); return; }
+  if(!caiHasSource()){ setStatus('Open the BW installation folder or SC:R CASC first.',true); return; }
   try{ await caiLoad(); cwtRender(); $('#cwt').classList.add('on'); }
   catch(e){ setStatus('Walkthrough: '+e.message,true); }
 });
@@ -3234,9 +3234,9 @@ $('#cwtClose').addEventListener('click',()=>$('#cwt').classList.remove('on'));
 $('#cwtFilter').addEventListener('input',cwtRender);
 $('#cwtCsv').addEventListener('click',cwtCsv);
 
-/* ========================= HUD v2 layout editorius =========================
-   Panelių geometrija (ui/ui.h formulės). Tempk panelį
-   — išvestis: normalizuoti rėžiai + atkurtos hud2_* formulės. */
+/* ========================= HUD v2 layout editor =========================
+   Panel geometry (ui/ui.h formulas). Drag a panel
+   — output: normalized rects + regenerated hud2_* formulas. */
 const HUD={W:2560,H:1600,scale:0.4,panels:[],drag:null,sel:null,locked:false,
   font:{name:30,detector:20,rank:22,kills:22},   // Unit Display font sizes, px @basis
   history:[],histIdx:-1};
@@ -3262,31 +3262,31 @@ function hudDefault(W,H){
   const P=[];
   const add=o=>{P.push(o);return o;};
   // ---- bottom-bar panels ----
-  const mm=add({key:'minimap',label:'Minimapas',grp:'bar',fn:'hud2_minimap_panel',x:edge,y:bottom,w:bar,h:bar});
-  const card=add({key:'card',label:'Komandų kortelė 3×3',grp:'bar',fn:'hud2_card_panel',x:W-edge-bar,y:bottom,w:bar,h:bar,card:1});
+  const mm=add({key:'minimap',label:'Minimap',grp:'bar',fn:'hud2_minimap_panel',x:edge,y:bottom,w:bar,h:bar});
+  const card=add({key:'card',label:'Command card 3×3',grp:'bar',fn:'hud2_card_panel',x:W-edge-bar,y:bottom,w:bar,h:bar,card:1});
   // Portrait = a SQUARE (the SMK video); the LAN latency strip sits below it, so
   // the two never overlap. side = bar*0.55.
   const pside=bar*0.55;
-  const port=add({key:'portrait',label:'Portretas (SMK)',grp:'bar',fn:'hud2_portrait_panel',w:pside,h:pside});
+  const port=add({key:'portrait',label:'Portrait (SMK)',grp:'bar',fn:'hud2_portrait_panel',w:pside,h:pside});
   port.x=card.x-mar*3-port.w; port.y=bottom+bar*0.22;
   add({key:'menu',label:'MENU',grp:'bar',fn:'hud2_menu_panel',x:port.x,y:bottom,w:port.w,h:bar*0.2});
   add({key:'latency',label:'LAN latency',grp:'bar',fn:'hud2_latency_strip',x:port.x,y:port.y+pside,w:port.w,h:(bottom+bar)-(port.y+pside),latency:1});
   const unit=add({key:'unit',label:'Unit Display',grp:'bar',fn:'hud2_unit_panel',x:mm.x+mm.w+mar*3,y:bottom+grpH,w:(port.x-mar*3)-(mm.x+mm.w+mar*3),h:bar-grpH});
   // ---- Unit Display inner elements (draggable within) ----
   add({key:'wireframe',label:'Wireframe',grp:'unit',fn:'hud2_wireframe_box',x:unit.x+pad,y:unit.y+pad,w:bar*0.4,h:bar*0.4,resizable:1});
-  add({key:'name',label:'Vardas / Rank / Kills',grp:'unit',fn:'draw_hud2_unit_display (rx)',x:unit.x+bar*0.45,y:unit.y+pad,w:bar*0.5,h:bar*0.36,nameblock:1});
+  add({key:'name',label:'Name / Rank / Kills',grp:'unit',fn:'draw_hud2_unit_display (rx)',x:unit.x+bar*0.45,y:unit.y+pad,w:bar*0.5,h:bar*0.36,nameblock:1});
   add({key:'status',label:'HP / SH / EN',grp:'unit',fn:'draw_hud2_unit_display (wcx)',x:unit.x+pad,y:unit.y+bar*0.45,w:bar*0.4,h:bar*0.3,status:1});
   add({key:'production',label:'Production',grp:'unit',fn:'production_slot_rects',x:unit.x+bar*0.45,y:unit.y+bar*0.28,w:bar*0.62,h:bar*0.22,resizable:1,production:1});
   add({key:'badges',label:'Equipment badges',grp:'unit',fn:'draw_hud2_unit_display (es)',x:unit.x+unit.w-bar*0.34,y:unit.y+unit.h-bar*0.18,w:bar*0.3,h:bar*0.14,badges:1});
   // ---- util row (PING/IDLE/ARMY) above minimap ----
   add({key:'util',label:'PING / IDLE / ARMY',grp:'strip',fn:'hud2_util_cell',x:mm.x,y:mm.y-utilH-2,w:mm.w,h:utilH,util:1});
   // ---- groups strip 0-9 + QUEUE above unit display ----
-  add({key:'groups',label:'Grupės 0–9 + QUEUE',grp:'strip',fn:'hud2_groups_strip',x:unit.x,y:unit.y-grpH,w:unit.w,h:grpH,groups:1});
+  add({key:'groups',label:'Groups 0–9 + QUEUE',grp:'strip',fn:'hud2_groups_strip',x:unit.x,y:unit.y-grpH,w:unit.w,h:grpH,groups:1});
   // ---- top overlays ----
   add({key:'fps',label:'FPS',grp:'top',fn:'draw_fps',x:mar+2,y:mar,w:W*0.06,h:utilH});
-  add({key:'timer',label:'Laikas',grp:'top',fn:'draw_game_timer',x:W/2-W*0.05,y:mar,w:W*0.1,h:utilH});
+  add({key:'timer',label:'Time',grp:'top',fn:'draw_game_timer',x:W/2-W*0.05,y:mar,w:W*0.1,h:utilH});
   add({key:'apm',label:'APM',grp:'top',fn:'draw_apm',x:W/2-W*0.04,y:mar+utilH+2,w:W*0.08,h:utilH*0.8});
-  add({key:'resources',label:'Resursai',grp:'top',fn:'draw_hud2_resources',x:W-edge-W*0.18,y:mar,w:W*0.18,h:H*0.03});
+  add({key:'resources',label:'Resources',grp:'top',fn:'draw_hud2_resources',x:W-edge-W*0.18,y:mar,w:W*0.18,h:H*0.03});
   return P.map(p=>({...p,x:Math.round(p.x),y:Math.round(p.y),w:Math.round(p.w),h:Math.round(p.h)}));
 }
 const HUD_GRP_FILL={bar:'#20282c',unit:'#182430',strip:'#141a20',top:'#12181c'};
@@ -3457,7 +3457,7 @@ $('#hudExport').addEventListener('click',()=>{
   hudOut();   // ensure current
   const url=URL.createObjectURL(new Blob([$('#hudJson').value],{type:'text/plain'}));
   dl(url,'hud2-layout.txt'); URL.revokeObjectURL(url);
-  setStatus('Eksportuota <b>hud2-layout.txt</b> (hud2_* C++ formulės + JSON).');
+  setStatus('Eksportuota <b>hud2-layout.txt</b> (hud2_* C++ formulas + JSON).');
 });
 
 /* ========================= Mod Builder ========================= */
@@ -3475,13 +3475,13 @@ function modValidateAll(){
       if(/aiscript\.bin$|bwscript\.bin$/.test(f.path)){
         const d=parseAiScripts(f.data.buffer.slice(f.data.byteOffset,f.data.byteOffset+f.data.byteLength),f.path);
         const bad=d.scripts.filter(s=>s.err);
-        if(bad.length)warns.push(f.path+': '+bad.length+' scriptai nedekoduojasi');
+        if(bad.length)warns.push(f.path+': '+bad.length+' scripts do not decode');
       } else if(/\.grp$/.test(f.path)){
         const dv=new DataView(f.data.buffer,f.data.byteOffset);
         const fc=dv.getUint16(0,true),w=dv.getUint16(2,true),h=dv.getUint16(4,true);
-        if(!(fc>0&&fc<10000&&w>0&&w<=800&&h>0&&h<=800))warns.push(f.path+': įtartinas GRP header');
+        if(!(fc>0&&fc<10000&&w>0&&w<=800&&h>0&&h<=800))warns.push(f.path+': suspicious GRP header');
       }
-    }catch(e){ warns.push(f.path+': validacijos klaida '+e.message); }
+    }catch(e){ warns.push(f.path+': validation error '+e.message); }
   }
   return warns;
 }
@@ -3499,28 +3499,28 @@ function modRender(){
   for(let i=0;i<MOD.files.length;i++){ const f=MOD.files[i];
     const tr=document.createElement('tr');
     tr.innerHTML='<td>data/'+f.path+'</td><td style="color:var(--ink-dim)">'+f.source+'</td><td>'+f.data.length+' B</td>'
-      +'<td class="rm" title="pašalinti">✕</td>';
+      +'<td class="rm" title="remove">✕</td>';
     tr.querySelector('.rm').onclick=()=>{MOD.files.splice(i,1);modRender();};
     tb.appendChild(tr);
   }
   const warns=modValidateAll();
   const wfNote=MOD.files.some(f=>f.path==='wireframe-colors.json')
-    ?['wireframe-colors.json: variklis JO DAR NESKAITO (reikia engine feature)']:[];
+    ?['wireframe-colors.json: the engine DOES NOT READ IT YET (needs an engine feature)']:[];
   const allw=warns.concat(wfNote);
   $('#modWarn').innerHTML=allw.length?('⚠ '+allw.join(' · ')):'';
   const man=modManifest(), zn=modZipName();
-  $('#modPreview').value='// '+zn+'.zip  (id = failo vardas; turinys šaknyje)\n'
-    +'mod.json:\n'+JSON.stringify(man,null,2)+'\n\n// turinys:\n'
+  $('#modPreview').value='// '+zn+'.zip  (id = file name; contents at the root)\n'
+    +'mod.json:\n'+JSON.stringify(man,null,2)+'\n\n// contents:\n'
     +MOD.files.map(f=>'  data/'+f.path+'  ('+f.data.length+' B)').join('\n');
 }
 $('#modOpen').addEventListener('click',()=>{ modRender(); $('#mod').classList.add('on'); });
 $('#modClose').addEventListener('click',()=>$('#mod').classList.remove('on'));
 ['#modId','#modName','#modVer','#modDesc','#modType','#modAuthor'].forEach(id=>$(id).addEventListener('input',modRender));
 $('#modAddWf').addEventListener('click',()=>{
-  if(!WF.ready){ setStatus('Pirma atverk Wireframe testerį (kad būtų spalvos).',true); return; }
+  if(!WF.ready){ setStatus('Open the Wireframe tester first (so there are colours).',true); return; }
   const data=new TextEncoder().encode(JSON.stringify(wfJsonObject(),null,2));
-  modAdd('wireframe-colors.json','wireframe ⚠ (variklis dar neskaito)',data);
-  setStatus('Pridėta wireframe-colors.json — ⚠ variklis JO DAR NESKAITO; reikia engine feature, kad įsigaliotų.',true);
+  modAdd('wireframe-colors.json','wireframe ⚠ (engine does not read it yet)',data);
+  setStatus('Added wireframe-colors.json — ⚠ the engine DOES NOT READ IT YET; an engine feature is needed for it to take effect.',true);
 });
 $('#modAiFile').addEventListener('change',async e=>{ const file=e.target.files[0]; if(!file)return;
   const buf=await file.arrayBuffer(); const doc=parseAiScripts(buf,file.name);
@@ -3530,12 +3530,12 @@ $('#modAiFile').addEventListener('change',async e=>{ const file=e.target.files[0
 });
 $('#modFile').addEventListener('change',async e=>{ const file=e.target.files[0]; if(!file)return;
   const buf=new Uint8Array(await file.arrayBuffer());
-  const gp=prompt('Žaidimo kelias (be data/), pvz. unit\\wirefram\\wirefram.grp:',file.name);
+  const gp=prompt('Game path (without data/), e.g. unit\\wirefram\\wirefram.grp:',file.name);
   if(gp)modAdd(gp,'override ('+file.name+')',buf);
   e.target.value='';
 });
 $('#modPack').addEventListener('click',()=>{
-  if(!MOD.files.length){ setStatus('Pridėk bent vieną failą.',true); return; }
+  if(!MOD.files.length){ setStatus('Add at least one file.',true); return; }
   const man=modManifest(), zn=modZipName();
   // contents at the ROOT — the launcher extracts straight into files/mods/<zipname>/
   const entries=[{name:'mod.json',data:new TextEncoder().encode(JSON.stringify(man,null,2))}];
@@ -3545,30 +3545,30 @@ $('#modPack').addEventListener('click',()=>{
   const zip=zipStore(entries);
   const url=URL.createObjectURL(new Blob([zip],{type:'application/zip'})); dl(url,zn+'.zip'); URL.revokeObjectURL(url);
   const warns=modValidateAll();
-  setStatus('Supakuota <b>'+zn+'.zip</b> (id = failo vardas) — '+MOD.files.length+' failai'+(warns.length?(' · ⚠ '+warns.length+' įspėjimai'):' · validacija OK'));
+  setStatus('Packaged <b>'+zn+'.zip</b> (id = file name) — '+MOD.files.length+' files'+(warns.length?(' · ⚠ '+warns.length+' warnings'):' · validation OK'));
 });
 $('#modUseMpq').addEventListener('change',e=>{ if(e.target.checked){
-  setStatus('data.mpq pakavimas — per Python <b>tools/mod_pack.py --use-mpq</b>. Naršyklėje kol kas tik loose.',true);
+  setStatus('data.mpq packaging — via Python <b>tools/mod_pack.py --use-mpq</b>. In the browser only loose for now.',true);
   e.target.checked=false; }});
 
 /* ---- Build-order library (Miro cards, V) + measured name->id map ---- */
 const BUILD_ORDERS=[{"id":"t-bunker-rush-vz","race":"T","name":"Bunker Rush","matchup":"VS Zerg","aggression":7,"economy":3,"build":[{"name":"Barracks","supply":8,"condition":null,"note":null,"action":false},{"name":"Supply Depot","supply":9,"condition":null,"note":null,"action":false},{"name":"Scout","supply":10,"condition":null,"note":null,"action":true},{"name":"Marine","supply":null,"condition":"100% Barracks","note":"Set Barracks rally on Zerg natural, push at 2 Marines","action":false},{"name":"Supply Depot","supply":15,"condition":null,"note":null,"action":false}],"countered_by":["4 Pool","9 Pool","12 Pool"],"counter_to":["12 Hatch"],"notable_maps":{"good":["Short Walking Distance","Two Player Maps"],"bad":["Long Walking Distance"]},"description":"Early aggressive build to damage a fast-expanding Zerg by killing Drones or the expansion. Usually an 8 Rax build; sometimes the all-in BBS."},{"id":"t-1-fact-fast-expand-vt","race":"T","name":"1 Fact Fast Expand","matchup":"VS Terran","aggression":3,"economy":7,"build":[{"name":"Supply Depot","supply":9,"condition":null,"note":null,"action":false},{"name":"Barracks","supply":12,"condition":null,"note":"Build 1-2 Marines, then lift off the Barracks and scout with it.","action":false},{"name":"Refinery","supply":null,"condition":null,"note":null,"action":false},{"name":"Scout","supply":13,"condition":null,"note":"Can be delayed to 14 or 15 supply.","action":true},{"name":"Supply Depot","supply":16,"condition":null,"note":null,"action":false},{"name":"Factory","supply":null,"condition":null,"note":"Take 2 SCVs off gas at this point.","action":false},{"name":"Command Center","supply":20,"condition":null,"note":null,"action":false},{"name":"Vulture","supply":null,"condition":null,"note":"Add 2 SCVs back on gas.","action":false},{"name":"Supply Depot","supply":23,"condition":null,"note":null,"action":false},{"name":"Machine Shop","supply":24,"condition":null,"note":"Second Vulture if necessary.","action":false},{"name":"Factory","supply":26,"condition":null,"note":null,"action":false}],"countered_by":["Greedy Builds","Aggressive Builds"],"counter_to":["Nothing in particular"],"notable_maps":{"good":[],"bad":[]},"description":"The One Factory Fast Expand is a safe, standard opening in TvT. It builds an early Factory and secures a quick expansion."},{"id":"t-1-rax-fast-expand-vp","race":"T","name":"1 Rax Fast Expand","matchup":"VS Protoss","aggression":2,"economy":8,"build":[{"name":"Supply Depot","supply":9,"condition":null,"note":null,"action":false},{"name":"Barracks","supply":11,"condition":null,"note":null,"action":false},{"name":"Command Center","supply":15,"condition":null,"note":null,"action":false},{"name":"Supply Depot","supply":16,"condition":null,"note":null,"action":false},{"name":"Refinery","supply":null,"condition":null,"note":null,"action":false},{"name":"2 Marines","supply":null,"condition":null,"note":null,"action":false},{"name":"Factory","supply":21,"condition":null,"note":null,"action":false},{"name":"Bunker at Natural","supply":null,"condition":null,"note":null,"action":false},{"name":"Factory","supply":25,"condition":null,"note":null,"action":false},{"name":"Supply Depot","supply":28,"condition":null,"note":null,"action":false},{"name":"Refinery at Natural","supply":30,"condition":null,"note":null,"action":false},{"name":"Siege Tank","supply":31,"condition":null,"note":null,"action":false},{"name":"Siege Mode","supply":null,"condition":null,"note":null,"action":false},{"name":"Supply Depot","supply":37,"condition":null,"note":null,"action":false},{"name":"Engineering Bay","supply":44,"condition":null,"note":null,"action":false}],"countered_by":["Proxy Gateway(s) Rush","Fast Tech (DTs, Reaver, etc)"],"counter_to":["12 Nexus","2 Gate Dragoon Obs"],"notable_maps":{"good":["Small Chokes"],"bad":["Wide Chokes"]},"description":"The 1 Barracks Fast Expand creates an economic advantage without being as risky as 14 CC. It negates the 12 Nexus build and can respond to a Protoss gas steal."},{"id":"t-14-cc-vt","race":"T","name":"14 CC","matchup":"VS Terran","aggression":1,"economy":9,"build":[{"name":"Supply Depot","supply":9,"condition":null,"note":null,"action":false},{"name":"Take Natural","supply":14,"condition":null,"note":null,"action":true},{"name":"Barracks","supply":15,"condition":null,"note":null,"action":false},{"name":"Refinery","supply":16,"condition":null,"note":null,"action":false},{"name":"Supply Depot","supply":null,"condition":null,"note":null,"action":false},{"name":"Marine","supply":23,"condition":null,"note":null,"action":false},{"name":"Bunker","supply":null,"condition":null,"note":null,"action":false},{"name":"Marine","supply":26,"condition":null,"note":null,"action":false},{"name":"Natural Refinery","supply":null,"condition":null,"note":null,"action":false}],"countered_by":["Proxy Rax","Barracks Barracks Supply","Double Expand"],"counter_to":["1 Fact FE"],"notable_maps":{"good":["4 Player or Big Maps"],"bad":["Small Maps"]},"description":"14 CC is the most risky non-cheese Terran opening. A rare opening, but feasible depending on the circumstances and map."},{"id":"t-2-fact-vulture-mines-vp","race":"T","name":"2 Fact Vulture Mines","matchup":"VS Protoss","aggression":7,"economy":3,"build":[{"name":"Supply Depot","supply":9,"condition":null,"note":null,"action":false},{"name":"Barracks","supply":11,"condition":null,"note":null,"action":false},{"name":"Refinery","supply":11,"condition":null,"note":null,"action":false},{"name":"Factory","supply":16,"condition":null,"note":null,"action":false},{"name":"Supply Depot","supply":null,"condition":null,"note":null,"action":false},{"name":"Factory","supply":18,"condition":null,"note":null,"action":false},{"name":"Supply Depot","supply":22,"condition":null,"note":null,"action":false},{"name":"Pump Vultures","supply":null,"condition":"100% Factory","note":null,"action":false},{"name":"Vulture Speed","supply":null,"condition":"100% Machine Shop 1","note":null,"action":false},{"name":"Spider Mines","supply":null,"condition":"100% Machine Shop 2","note":null,"action":false},{"name":"Supply Depot","supply":28,"condition":null,"note":null,"action":false}],"countered_by":["2 Gateway Builds","1 Gateway Expand"],"counter_to":["Dark Templar Rushes","Reaver Drop Play","General Drop Play"],"notable_maps":{"good":["Wide Chokes"],"bad":["Backdoor Expansions"]},"description":"A very aggressive Terran opening to punish greedy Protoss expansions or tech like a DT Rush, sacrificing macro to obtain map control within the first ten minutes."},{"id":"t-2-port-wraith-vt","race":"T","name":"2 Port Wraith","matchup":"VS Terran","aggression":8,"economy":2,"build":[{"name":"Supply Depot","supply":9,"condition":null,"note":null,"action":false},{"name":"Barracks","supply":11,"condition":null,"note":null,"action":false},{"name":"Refinery","supply":12,"condition":null,"note":null,"action":false},{"name":"Supply Depot","supply":13,"condition":null,"note":null,"action":false},{"name":"Factory","supply":16,"condition":null,"note":null,"action":false},{"name":"3-4 Marines","supply":null,"condition":"100% Barracks","note":null,"action":false},{"name":"Vulture","supply":null,"condition":"100% Factory","note":null,"action":false},{"name":"Machine Shop","supply":null,"condition":null,"note":null,"action":false},{"name":"Spider Mines","supply":null,"condition":"100% Machine Shop","note":null,"action":false},{"name":"Pump Vultures","supply":null,"condition":null,"note":null,"action":false},{"name":"2 Starports","supply":22,"condition":null,"note":null,"action":false},{"name":"Supply Depot","supply":null,"condition":null,"note":null,"action":false},{"name":"2 Wraiths","supply":null,"condition":"100% Starports","note":null,"action":false},{"name":"Control Tower","supply":null,"condition":"100% 2 Wraiths","note":null,"action":false},{"name":"Pump Wraiths","supply":null,"condition":null,"note":null,"action":false}],"countered_by":["Early Goliaths","Good or Aggressive Scout","Mass Turrets"],"counter_to":["Poor or Denied Scout"],"notable_maps":{"good":["Harassable Mineral Line"],"bad":["Defendable Mineral Line"]},"description":"A surprise opener designed to harass, be annoying and gain an economic edge while sniping objectives in small skirmishes."},{"id":"t-4-rax-sunken-break-vz","race":"T","name":"4 Rax Sunken Break","matchup":"VS Zerg","aggression":8,"economy":2,"build":[{"name":"Supply Depot","supply":9,"condition":null,"note":null,"action":false},{"name":"Barracks","supply":11,"condition":null,"note":null,"action":false},{"name":"1st Scout","supply":12,"condition":null,"note":null,"action":true},{"name":"Supply Depot","supply":14,"condition":null,"note":null,"action":false},{"name":"2nd Scout","supply":15,"condition":null,"note":null,"action":true},{"name":"Pump Marines","supply":null,"condition":"100% Barracks","note":null,"action":false},{"name":"Take Natural","supply":21,"condition":null,"note":null,"action":true},{"name":"3 Barracks","supply":null,"condition":"450 Minerals","note":null,"action":false},{"name":"Refinery","supply":26,"condition":null,"note":null,"action":false},{"name":"Academy","supply":26,"condition":null,"note":null,"action":false},{"name":"Stim Pack","supply":null,"condition":"100% Academy","note":null,"action":false},{"name":"4 Medics","supply":35,"condition":null,"note":null,"action":false},{"name":"4 Marines","supply":39,"condition":null,"note":null,"action":false},{"name":"Range Upgrade","supply":null,"condition":null,"note":null,"action":false},{"name":"Engineering Bay","supply":null,"condition":null,"note":null,"action":false},{"name":"Pump Marine/Medic","supply":null,"condition":null,"note":null,"action":false}],"countered_by":["3 Hatch Zergling","2 Hatch Muta","2 Hatch Lurker","9 Pool"],"counter_to":["3 Hatch Muta","3 Hatch Lurker"],"notable_maps":{"good":["Short Walking Distance"],"bad":["Narrow Chokes","Long Walking Distance"]},"description":"A TvZ build to counter the standard 3 Hatch Muta. Under a 1 Rax FE facade, Terran breaks the Zerg with four Barracks before Mutalisk or Lurker tech arrives."},{"id":"t-siege-expand-vp","race":"T","name":"Siege Expand","matchup":"VS Protoss","aggression":2,"economy":8,"build":[{"name":"Supply Depot","supply":9,"condition":null,"note":null,"action":false},{"name":"Scout","supply":null,"condition":null,"note":null,"action":true},{"name":"Barracks","supply":12,"condition":null,"note":null,"action":false},{"name":"Refinery","supply":12,"condition":null,"note":null,"action":false},{"name":"Supply Depot","supply":16,"condition":null,"note":null,"action":false},{"name":"Factory","supply":null,"condition":null,"note":null,"action":false},{"name":"Machine Shop","supply":null,"condition":"100% Factory","note":null,"action":false},{"name":"Siege Tank","supply":null,"condition":"100% Machine Shop","note":null,"action":false},{"name":"Take Natural","supply":21,"condition":null,"note":null,"action":true},{"name":"Supply Depot","supply":24,"condition":null,"note":null,"action":false},{"name":"Siege Mode","supply":25,"condition":null,"note":null,"action":false},{"name":"Engineering Bay","supply":28,"condition":null,"note":null,"action":false}],"countered_by":["Bulldog Strats","Fast Expand Variations"],"counter_to":["Nothing in particular"],"notable_maps":{"good":["Close or In-Base 3rd"],"bad":["Nothing in particular"]},"description":"One of the oldest, most reliable TvP openings. A conservative build to help a Fast Expansion while staying safe against most Protoss aggression."},{"id":"p-1-gate-reaver-vt","race":"P","name":"1 Gate Reaver","matchup":"VS Terran","aggression":6,"economy":4,"build":[{"name":"Pylon","supply":8,"condition":null,"note":null,"action":false},{"name":"Gateway","supply":10,"condition":null,"note":null,"action":false},{"name":"Assimilator","supply":11,"condition":null,"note":null,"action":false},{"name":"Cybernetics Core","supply":13,"condition":null,"note":null,"action":false},{"name":"Pylon","supply":15,"condition":null,"note":null,"action":false},{"name":"Dragoon","supply":18,"condition":null,"note":"You can build 4 or 5 Dragoons here.","action":false},{"name":"Dragoon Range","supply":20,"condition":null,"note":null,"action":false},{"name":"Pylon","supply":21,"condition":null,"note":null,"action":false},{"name":"Robotics Facility","supply":26,"condition":"200 Gas","note":null,"action":false},{"name":"Shuttle","supply":null,"condition":"100% Robotics Facility","note":null,"action":false},{"name":"Robotics Support Bay","supply":null,"condition":"100% Robotics Facility","note":"Start Reaver production as soon as the Support Bay finishes.","action":false},{"name":"Pylon","supply":29,"condition":null,"note":null,"action":false},{"name":"Observatory","supply":34,"condition":null,"note":null,"action":false},{"name":"Observer","supply":null,"condition":"100% Observatory","note":null,"action":false},{"name":"Take Natural","supply":37,"condition":null,"note":null,"action":true}],"countered_by":["Drop Play / Wraiths","2 Fact Rushes","Siege Expand"],"counter_to":["2 Fact Vulture","Fake Double"],"notable_maps":{"good":["Large Main","Long Walking Distance"],"bad":["Nothing in particular"]},"description":"One of the most traditional forms of Protoss harassment. Aggressive, designed to deal economic damage to Terran; the Reaver threat keeps Terran from attacking early."},{"id":"p-12-nexus-5-zealot-fast-expansion-vp","race":"P","name":"12 Nexus 5 Zealot Fast Expansion","matchup":"VS Protoss","aggression":4,"economy":6,"build":[{"name":"Pylon","supply":8,"condition":null,"note":"Send a probe to scout after the first pylon.","action":false},{"name":"Nexus","supply":12,"condition":null,"note":null,"action":false},{"name":"Gateway","supply":12,"condition":null,"note":null,"action":false},{"name":"Gateway","supply":14,"condition":null,"note":null,"action":false},{"name":"Pylon at Natural","supply":15,"condition":null,"note":null,"action":false},{"name":"5 Zealots","supply":null,"condition":null,"note":"Zealot production has highest priority.","action":false},{"name":"Assimilator","supply":null,"condition":"100 Minerals","note":null,"action":false},{"name":"Cybernetics Core","supply":null,"condition":"200 Minerals","note":null,"action":false},{"name":"Forge","supply":null,"condition":"150 Minerals","note":null,"action":false},{"name":"Photon Cannon","supply":null,"condition":"100% Forge","note":"Cannon count depends on opponent pressure.","action":false}],"countered_by":["2 Proxy Gate","2 Gate Variations","Proxy Robo"],"counter_to":["Nothing in particular"],"notable_maps":{"good":["Large Maps","Long Walking Distance"],"bad":["Small Maps","Short Walking Distance"]},"description":"A modern PvP opening for an economic advantage without falling behind in tech, but the expanding player must play passively early due to a lower unit count."},{"id":"p-2-gate-dt-rush-vp","race":"P","name":"2 Gate DT Rush","matchup":"VS Protoss","aggression":6,"economy":4,"build":[{"name":"Pylon","supply":8,"condition":null,"note":null,"action":false},{"name":"Gateway","supply":10,"condition":null,"note":"Use that probe to scout.","action":false},{"name":"Assimilator","supply":12,"condition":null,"note":null,"action":false},{"name":"Zealot","supply":13,"condition":null,"note":null,"action":false},{"name":"Pylon","supply":16,"condition":null,"note":null,"action":false},{"name":"Cybernetics Core","supply":18,"condition":null,"note":null,"action":false},{"name":"Zealot","supply":19,"condition":null,"note":null,"action":false},{"name":"Pylon","supply":22,"condition":null,"note":null,"action":false},{"name":"Dragoon","supply":23,"condition":null,"note":null,"action":false},{"name":"Citadel of Adun","supply":26,"condition":null,"note":null,"action":false},{"name":"Dragoon","supply":27,"condition":null,"note":"Stop all production incl. Probes for the next three buildings.","action":false},{"name":"Gateway","supply":29,"condition":null,"note":null,"action":false},{"name":"Templar Archives","supply":null,"condition":null,"note":null,"action":false},{"name":"2 Zealots","supply":null,"condition":null,"note":null,"action":false},{"name":"2 Dark Templars","supply":null,"condition":null,"note":null,"action":false},{"name":"Forge","supply":null,"condition":null,"note":null,"action":false},{"name":"Take Natural","supply":null,"condition":null,"note":"First cannon and first 2 DTs out around the 6 minute mark.","action":true},{"name":"Photon Cannons","supply":null,"condition":null,"note":null,"action":false}],"countered_by":["4 Gate Goon"],"counter_to":["Fast Expansions","DT Rushes"],"notable_maps":{"good":["Narrow Chokes"],"bad":["Nothing in particular"]},"description":"A group of openings enabling early Dark Templar. A one-base timed attack threatens or kills the opponent while preparing an expansion."},{"id":"p-2-gate-range-expand-vt","race":"P","name":"2 Gate Range Expand","matchup":"VS Terran","aggression":3,"economy":7,"build":[{"name":"Pylon","supply":8,"condition":null,"note":"Scout after the first pylon.","action":false},{"name":"Gateway","supply":10,"condition":null,"note":null,"action":false},{"name":"Assimilator","supply":12,"condition":null,"note":null,"action":false},{"name":"Cybernetics Core","supply":13,"condition":null,"note":null,"action":false},{"name":"Pylon","supply":15,"condition":null,"note":null,"action":false},{"name":"Dragoon Range","supply":17,"condition":null,"note":"Pull one probe off gas.","action":false},{"name":"Gateway","supply":18,"condition":null,"note":null,"action":false},{"name":"Nexus","supply":20,"condition":null,"note":"Stop Probe production; focus Dragoons.","action":false},{"name":"2 Dragoons","supply":null,"condition":null,"note":null,"action":false},{"name":"Pylon","supply":24,"condition":null,"note":"Third probe back on gas; resume probes.","action":false},{"name":"2 Dragoons","supply":25,"condition":null,"note":null,"action":false},{"name":"Robotics Facility","supply":31,"condition":null,"note":null,"action":false}],"countered_by":["Three Factory All-Ins","Barracks Barracks Supply (BBS)","14 CC"],"counter_to":["FD Build","Rush Builds"],"notable_maps":{"good":["Large Maps","Long Walking Distance"],"bad":["Small Maps","Short Walking Distance"]},"description":"A specialized PvT build for an early expansion while staying safe against Terran early rush builds."},{"id":"p-2-gate-reaver-vp","race":"P","name":"2 Gate Reaver","matchup":"VS Protoss","aggression":6,"economy":4,"build":[{"name":"Pylon","supply":8,"condition":null,"note":"Scout on 8 or 10.","action":false},{"name":"Gateway","supply":10,"condition":null,"note":null,"action":false},{"name":"Assimilator","supply":11,"condition":null,"note":null,"action":false},{"name":"Cybernetics Core","supply":13,"condition":null,"note":null,"action":false},{"name":"Zealot","supply":14,"condition":null,"note":null,"action":false},{"name":"Pylon","supply":16,"condition":null,"note":"Place by the ramp for the Robotics Facility.","action":false},{"name":"Dragoon Range","supply":21,"condition":"100% Cybernetics Core","note":null,"action":false},{"name":"Dragoon","supply":22,"condition":null,"note":null,"action":false},{"name":"Robotics Facility","supply":25,"condition":null,"note":null,"action":false},{"name":"Dragoon","supply":25,"condition":null,"note":"Produce Dragoons continuously (occasionally a Zealot if gas-short).","action":false},{"name":"Gateway","supply":29,"condition":null,"note":null,"action":false},{"name":"Observatory","supply":null,"condition":"100% Robotics Facility","note":null,"action":false},{"name":"Observer","supply":null,"condition":"100% Observatory","note":"Resume probe production.","action":false},{"name":"Robotics Support Bay","supply":40,"condition":null,"note":null,"action":false},{"name":"Reaver","supply":41,"condition":null,"note":"Prioritize the Reaver ASAP.","action":false},{"name":"Reaver","supply":null,"condition":"100% 1st Reaver","note":null,"action":false},{"name":"Shuttle","supply":null,"condition":"100% 2nd Reaver","note":null,"action":false},{"name":"Take Natural","supply":65,"condition":null,"note":"Push with ~12 goons and 2 reavers in a shuttle at ~7:50-8:00.","action":true}],"countered_by":["4 Gate Goon"],"counter_to":["Fast Expansions","DT Rushes"],"notable_maps":{"good":["Narrow Chokes"],"bad":["Nothing in particular"]},"description":"An army of Dragoons with Range and a Shuttle+Reaver where the Reaver supports the ground forces rather than harassing."},{"id":"p-bulldog-vt","race":"P","name":"Bulldog","matchup":"VS Terran","aggression":7,"economy":3,"build":[{"name":"Pylon","supply":8,"condition":null,"note":null,"action":false},{"name":"Gateway","supply":10,"condition":null,"note":null,"action":false},{"name":"Assimilator","supply":11,"condition":null,"note":null,"action":false},{"name":"Cybernetics Core","supply":13,"condition":null,"note":null,"action":false},{"name":"Scout","supply":null,"condition":null,"note":null,"action":true},{"name":"Dragoon","supply":17,"condition":null,"note":null,"action":false},{"name":"Dragoon Range","supply":20,"condition":null,"note":null,"action":false},{"name":"Gateway","supply":20,"condition":null,"note":null,"action":false},{"name":"Pylon","supply":22,"condition":null,"note":null,"action":false},{"name":"2 Dragoons","supply":24,"condition":null,"note":null,"action":false},{"name":"Robotics Facility","supply":29,"condition":null,"note":null,"action":false},{"name":"2 Dragoons","supply":null,"condition":null,"note":null,"action":false},{"name":"Pylon","supply":33,"condition":null,"note":null,"action":false},{"name":"2 Zealots","supply":null,"condition":null,"note":null,"action":false},{"name":"Pylon","supply":37,"condition":null,"note":null,"action":false},{"name":"Shuttle","supply":38,"condition":null,"note":"After the first Shuttle you may start the Observatory to prevent Spidermine fields.","action":false},{"name":"2 Zealots","supply":40,"condition":null,"note":"Initiate the attack as soon as possible after these finish.","action":false}],"countered_by":["2 Factory Builds"],"counter_to":["Siege Expand","Well Fortified Terran"],"notable_maps":{"good":["Wide Chokes","No Ramps"],"bad":["Nothing in particular"]},"description":"An aggressive opening that sacrifices economy to break Terran defenses early. A more committing variation of the 10/15 Gateway build."},{"id":"p-forge-fast-expand-vz","race":"P","name":"Forge Fast Expand","matchup":"VS Zerg","aggression":2,"economy":8,"build":[{"name":"Pylon at Natural","supply":8,"condition":"BASE BUILD","note":"Correct FFE formation assists a safe fast expand vs Zerg.","action":false},{"name":"Scout","supply":8,"condition":"BASE BUILD","note":null,"action":true},{"name":"Forge","supply":10,"condition":"BASE BUILD","note":null,"action":false},{"name":"2 Cannons","supply":14,"condition":"VS 9 POOL","note":null,"action":false},{"name":"Nexus","supply":15,"condition":"VS 9 POOL","note":"Stop probe production here.","action":false},{"name":"Gateway","supply":15,"condition":"VS 9 POOL","note":"Resume probe production.","action":false},{"name":"Pylon","supply":16,"condition":"VS 9 POOL","note":null,"action":false},{"name":"Assimilator","supply":17,"condition":"VS 9 POOL","note":null,"action":false},{"name":"Cybernetics Core","supply":18,"condition":"VS 9 POOL","note":null,"action":false},{"name":"Zealot","supply":19,"condition":"VS 9 POOL","note":null,"action":false}],"countered_by":["All-In Rushes","2 Hatch before Spawning Pool"],"counter_to":["Nothing in particular"],"notable_maps":{"good":["Easy to Wall-In","Wide Chokes"],"bad":["Hard to Wall-In","Small Chokes"]},"description":"A safe, defensive PvZ opening. Fast expand behind a Forge and Cannons to quickly secure a second geyser and reach a strong mid game. (Card also lists VS 12 POOL / 12 HATCH / OVERPOOL variations.)"},{"id":"z-7-pool-vt","race":"Z","name":"7 Pool","matchup":"VS Terran","aggression":9,"economy":1,"build":[{"name":"Spawning Pool","supply":7,"condition":null,"note":null,"action":false},{"name":"Overlord","supply":7,"condition":null,"note":null,"action":false},{"name":"Drone","supply":null,"condition":null,"note":null,"action":false},{"name":"Scout","supply":null,"condition":null,"note":null,"action":true},{"name":"6 Zerglings","supply":null,"condition":"100% Spawning Pool","note":null,"action":false},{"name":"2 Zerglings","supply":11,"condition":null,"note":null,"action":false},{"name":"Take Natural","supply":12,"condition":null,"note":null,"action":true},{"name":"Extractor","supply":14,"condition":null,"note":null,"action":false}],"countered_by":["Zergling Tight Walls","8 Rax in Main","2 Rax FE","Block at Choke or Ramp"],"counter_to":["14 CC","Barracks Barracks Supply","1 Rax FE"],"notable_maps":{"good":["No ramps at main base","Hard to wall","Short Walking Distance"],"bad":["Ramps at main base","Easy to wall","Long Walking Distance"]},"description":"A highly aggressive, modern Zerg rush. Unlike a 4/5 Pool all-in, the 7 Pool morphs an early Overlord to transition into macro if the rush fails."},{"id":"z-9-pool-vt","race":"Z","name":"9 Pool","matchup":"VS Terran","aggression":6,"economy":4,"build":[{"name":"Spawning Pool","supply":9,"condition":null,"note":null,"action":false},{"name":"Drone","supply":null,"condition":null,"note":null,"action":false},{"name":"Extractor","supply":9,"condition":null,"note":null,"action":false},{"name":"Overlord","supply":10,"condition":null,"note":null,"action":false},{"name":"6 Zerglings","supply":null,"condition":"100% Spawning Pool","note":null,"action":false},{"name":"Take Natural","supply":15,"condition":null,"note":null,"action":true},{"name":"Zergling Speed","supply":null,"condition":"100 Gas","note":null,"action":false}],"countered_by":["Zergling Tight Walls","2 Rax FE","Non-Proxy 8 Rax"],"counter_to":["14 CC","Proxy Barracks","1 Rax FE"],"notable_maps":{"good":["No ramps at main base","Hard to wall"],"bad":["Ramps at main base","Small chokes"]},"description":"An early Zergling build giving a safe opening vs Terran cheese like 8 Rax or BBS. Can outright win or delay a Terran FE; the faster pool gives quicker tech. (Card lists Economy and Speed variations.)"},{"id":"z-12-hatch-vz","race":"Z","name":"12 Hatch","matchup":"VS Zerg","aggression":1,"economy":9,"build":[{"name":"Overlord","supply":9,"condition":null,"note":null,"action":false},{"name":"Hatchery","supply":12,"condition":null,"note":"2nd Hatchery","action":false},{"name":"Spawning Pool","supply":11,"condition":null,"note":null,"action":false},{"name":"Extractor","supply":10,"condition":null,"note":null,"action":false},{"name":"2 Drones","supply":null,"condition":null,"note":null,"action":false},{"name":"6 Zerglings","supply":12,"condition":null,"note":null,"action":false},{"name":"Lair","supply":null,"condition":"100 Gas","note":null,"action":false},{"name":"Pump Zerglings","supply":null,"condition":null,"note":null,"action":false},{"name":"Overlord","supply":16,"condition":null,"note":null,"action":false},{"name":"Zergling Speed","supply":null,"condition":"100 Gas","note":null,"action":false}],"countered_by":["4-5 Pool","9 Pool","Overpool"],"counter_to":["12 Pool","9/10 Hatch","Overgas"],"notable_maps":{"good":["Long Walking Distance","Backdoor Expansions"],"bad":["Short Walking distance"]},"description":"One of the most greedy and risky ZvZ strategies. An early economic advantage with a much faster second Hatchery, at the cost of a later pool vulnerable to 9 Pool or faster."},{"id":"z-12-pool-vz","race":"Z","name":"12 Pool","matchup":"VS Zerg","aggression":4,"economy":6,"build":[{"name":"Overlord","supply":9,"condition":null,"note":null,"action":false},{"name":"Spawning Pool","supply":12,"condition":null,"note":null,"action":false},{"name":"Extractor","supply":12,"condition":null,"note":null,"action":false},{"name":"Take Natural","supply":11,"condition":null,"note":null,"action":true},{"name":"2-X Zerglings","supply":null,"condition":null,"note":null,"action":false},{"name":"Zergling Speed","supply":null,"condition":"100 Gas","note":null,"action":false},{"name":"Lair","supply":null,"condition":null,"note":"Lair when possible","action":false},{"name":"Spire","supply":null,"condition":"100% Lair","note":null,"action":false}],"countered_by":["4-7 Pool","12 Hatch"],"counter_to":["9 Pool","Overpool"],"notable_maps":{"good":["Wide chokes"],"bad":["Short travel distance"]},"description":"A very safe, versatile ZvZ opening. Protects from most early Zergling rushes while keeping a superior economy — trading some economy vs 12 Hatch for safety."},{"id":"z-overpool-vz","race":"Z","name":"Overpool","matchup":"VS Zerg","aggression":5,"economy":5,"build":[{"name":"Overlord","supply":9,"condition":null,"note":null,"action":false},{"name":"Spawning Pool","supply":9,"condition":null,"note":null,"action":false},{"name":"Extractor","supply":9,"condition":null,"note":null,"action":false},{"name":"6 Zerglings","supply":null,"condition":"100% Spawning Pool","note":null,"action":false},{"name":"Zergling Speed","supply":null,"condition":"100 Gas","note":null,"action":false},{"name":"Lair","supply":null,"condition":"100 Gas","note":null,"action":false},{"name":"Overlord","supply":18,"condition":null,"note":null,"action":false},{"name":"Spire","supply":null,"condition":"100% Lair","note":null,"action":false},{"name":"3 Mutalisks","supply":null,"condition":"100% Spire","note":null,"action":false},{"name":"Take Natural","supply":null,"condition":"300 Minerals","note":null,"action":true}],"countered_by":["12 Pool"],"counter_to":["12 Hatch","5 Pool","9 Pool"],"notable_maps":{"good":["Air Harassable","Long Walking Distance"],"bad":["Air Defendable","Short Walking Distance"]},"description":"Standard ZvZ build. Overpool gets Zerglings out in time to defend a quicker Pool, while getting Mutalisks out in time to defend all-ins."},{"id":"z-3-hatch-hydralisk-vp","race":"Z","name":"3 Hatch Hydralisk","matchup":"VS Protoss","aggression":7,"economy":3,"build":[{"name":"Overlord","supply":9,"condition":null,"note":null,"action":false},{"name":"Spawning Pool","supply":9,"condition":null,"note":null,"action":false},{"name":"Take Natural","supply":11,"condition":null,"note":null,"action":true},{"name":"Scout","supply":null,"condition":null,"note":null,"action":true},{"name":"4 Zerglings","supply":12,"condition":null,"note":null,"action":false},{"name":"Take 3rd","supply":15,"condition":null,"note":null,"action":true},{"name":"Drone","supply":14,"condition":null,"note":null,"action":false},{"name":"Extractor","supply":15,"condition":null,"note":null,"action":false},{"name":"Overlord","supply":16,"condition":null,"note":null,"action":false},{"name":"Hydralisk Den","supply":null,"condition":"50 Gas","note":null,"action":false},{"name":"Hydralisk Speed","supply":null,"condition":"100% Hydralisk Den","note":null,"action":false},{"name":"Hydralisk Range","supply":null,"condition":"100% Hydralisk Speed","note":null,"action":false},{"name":"Move Out","supply":null,"condition":null,"note":null,"action":true}],"countered_by":["4 or more Cannons on Natural"],"counter_to":["Protoss Fast Expand"],"notable_maps":{"good":["Wide chokes"],"bad":["Narrow Chokes"]},"description":"A timing attack to hit Protoss before Zealot speed or Templar tech. Disguises itself as a 3 Hatch Lair build; strong on maps with large chokes."},{"id":"z-3-base-spire-5-hatch-hydralisk-vp","race":"Z","name":"3 Base Spire 5 Hatch Hydralisk","matchup":"VS Protoss","aggression":2,"economy":8,"build":[{"name":"Play Standard Opening","supply":null,"condition":null,"note":null,"action":true},{"name":"2-6 Zerglings","supply":null,"condition":"100% Spawning Pool","note":null,"action":false},{"name":"Lair","supply":null,"condition":"100 Gas","note":null,"action":false},{"name":"Zergling Speed","supply":null,"condition":"100 Gas","note":null,"action":false},{"name":"Spire","supply":null,"condition":"100% Lair","note":null,"action":false},{"name":"Hatchery","supply":null,"condition":null,"note":"3rd Hatchery","action":false},{"name":"Natural Extractor","supply":32,"condition":null,"note":null,"action":false},{"name":"Hydralisk Den","supply":35,"condition":null,"note":null,"action":false},{"name":"Hydralisk Speed","supply":null,"condition":"100% Hydralisk Den","note":null,"action":false},{"name":"Evolution Chamber","supply":null,"condition":null,"note":null,"action":false},{"name":"4 Scourge","supply":null,"condition":"100% Spire","note":null,"action":false},{"name":"2 Sunken Colonies","supply":null,"condition":null,"note":null,"action":false},{"name":"Pump Hydralisk","supply":42,"condition":null,"note":null,"action":false},{"name":"9-11 Mutalisk","supply":110,"condition":null,"note":null,"action":false},{"name":"Late Game Transition","supply":null,"condition":null,"note":null,"action":true}],"countered_by":["1 Base Protoss","+1 Speedlot Rush","Fast Maelstrom","Mass Goon/Templar Mid Game","Corsair/Reaver"],"counter_to":["4 Gate 2 Archon Rush","Zealot/High Templar"],"notable_maps":{"good":["Gas on 3rd Expansion"],"bad":["Gasless 3rd Expansion"]},"description":"A versatile, standard modern ZvP build. Reaching Lair tech faster, Zerg halts heavy Corsair play with Scourge while keeping a sizable economic advantage."}];
 const UNIT_IDS={"names":{"Barracks":111,"Supply Depot":109,"Refinery":110,"Command Center":106,"Factory":113,"Machine Shop":120,"Starport":114,"Control Tower":115,"Bunker":125,"Academy":112,"Engineering Bay":122,"Marine":0,"Firebat":32,"Medic":34,"Vulture":2,"Siege Tank":5,"Goliath":3,"Wraith":8,"SCV":7,"Pylon":156,"Gateway":160,"Assimilator":157,"Nexus":154,"Forge":166,"Photon Cannon":162,"Cybernetics Core":164,"Robotics Facility":155,"Robotics Support Bay":171,"Observatory":159,"Citadel of Adun":163,"Templar Archives":165,"Zealot":65,"Dragoon":66,"Dark Templar":61,"Reaver":83,"Observer":84,"Shuttle":69,"Probe":64,"Hatchery":131,"Lair":132,"Spawning Pool":142,"Extractor":149,"Evolution Chamber":139,"Hydralisk Den":135,"Spire":141,"Sunken Colony":146,"Creep Colony":143,"Drone":41,"Overlord":42,"Zergling":37,"Hydralisk":38,"Mutalisk":43,"Scourge":47},"kinds":{"Barracks":"building","Supply Depot":"building","Refinery":"building","Command Center":"building","Factory":"building","Machine Shop":"building","Starport":"building","Control Tower":"building","Bunker":"building","Academy":"building","Engineering Bay":"building","Marine":"unit","Firebat":"unit","Medic":"unit","Vulture":"unit","Siege Tank":"unit","Goliath":"unit","Wraith":"unit","SCV":"unit","Pylon":"building","Gateway":"building","Assimilator":"building","Nexus":"building","Forge":"building","Photon Cannon":"building","Cybernetics Core":"building","Robotics Facility":"building","Robotics Support Bay":"building","Observatory":"building","Citadel of Adun":"building","Templar Archives":"building","Zealot":"unit","Dragoon":"unit","Dark Templar":"unit","Reaver":"unit","Observer":"unit","Shuttle":"unit","Probe":"unit","Hatchery":"building","Lair":"building","Spawning Pool":"building","Extractor":"building","Evolution Chamber":"building","Hydralisk Den":"building","Spire":"building","Sunken Colony":"building","Creep Colony":"building","Drone":"unit","Overlord":"unit","Zergling":"unit","Hydralisk":"unit","Mutalisk":"unit","Scourge":"unit"}};
-/* ========================= Botų kūrėjas ========================= */
+/* ========================= Bot builder ========================= */
 /* Tactic tables are illustrative skeletons: the CONTROL FLOW is real, the unit/
    building/upgrade IDs are numeric placeholders (0, 106…) to be set from the
    user's own units.dat / stat_txt.tbl. The generator encodes whatever value it
    is given, so every template compiles disasm-clean regardless. */
 const BOT_TPL={
-rush:`# Rush botas — anksti puola. ID skaitiniai; keisk pagal savo units.dat / stat_txt.
+rush:`# Rush bot — attacks early. IDs are numeric; adjust to your own units.dat / stat_txt.
 start_town
 start_areatown
 farms_timing
 transports_off
-build 1 106 0        # 106 = gamybos pastatas
-train 5 0            # 0 = karinis vienetas (military-group idx)
+build 1 106 0        # 106 = production building
+train 5 0            # 0 = military unit (military-group idx)
 :main
-time_jump 1200 push  # po laiko -> puolimas
+time_jump 1200 push  # after time -> attack
 wait 200
 goto main
 :push
@@ -3578,14 +3578,14 @@ attack_prepare
 attack_do
 wait 600
 goto main`,
-defensive:`# Gynybinis botas — laukia, gina, kontratakuoja.
+defensive:`# Defensive bot — waits, defends, counterattacks.
 start_town
 start_areatown
 farms_timing
 transports_off
 build 2 106 0
 :main
-panic defend         # jei puolamas -> gynyba
+panic defend         # if attacked -> defense
 time_jump 3600 counter
 wait 300
 goto main
@@ -3599,7 +3599,7 @@ attack_add 12 0
 attack_prepare
 attack_do
 goto main`,
-adaptive:`# Adaptyvus botas — keičia taktiką pagal priešą / išteklius / difficulty.
+adaptive:`# Adaptive bot — changes tactics based on enemy / resources / difficulty.
 start_town
 start_areatown
 farms_timing
@@ -3607,8 +3607,8 @@ transports_off
 build 1 106 0
 train 4 0
 :main
-enemyowns_jump 9 antiair            # priešas turi vienetą 9 -> anti-air
-enemyresources_jump 800 800 turtle  # turtingas priešas -> gynyba
+enemyowns_jump 9 antiair            # enemy has unit 9 -> anti-air
+enemyresources_jump 800 800 turtle  # rich enemy -> defense
 random_jump 50 harass
 time_jump 3600 push
 wait 300
@@ -3632,7 +3632,7 @@ attack_prepare
 attack_do
 wait 600
 goto main`,
-economic:`# Ekonominis botas — plečiasi, tech, vėlyvas push.
+economic:`# Economic bot — expands, tech, late push.
 start_town
 start_areatown
 farms_timing
@@ -3666,7 +3666,7 @@ function botCompile(){
   let bin;
   try{
     const script={id:idPad,name,flags,code:steps};
-    if(merged){ if(!BOT.base)throw new Error('nėra įkelto stock aiscript.bin'); bin=aiMergeInto(BOT.base,[script]); }
+    if(merged){ if(!BOT.base)throw new Error('no stock aiscript.bin loaded'); bin=aiMergeInto(BOT.base,[script]); }
     else bin=aiBuildBin([script]);
   }catch(e){ BOT.bin=null; stat.innerHTML='<span class="bad">✕ '+e.message+'</span>'; dis.textContent=''; return; }
   // ORACLE (mirror of tests/ai/test_ai_gen.py): parse back, trace must be clean.
@@ -3679,7 +3679,7 @@ function botCompile(){
       +(i.args.length?'  '+i.args.map(aiArgText).join(' '):'')).join('\n');
     BOT.bin=bin; BOT.id=idPad;
     stat.innerHTML='<span class="ok">✓ CLEAN</span> · '+tgt.ins.length+' instr · '+bin.length+' B'
-      +(merged?(' · merge → '+parsed.scripts.length+' scriptai'):' · standalone');
+      +(merged?(' · merge → '+parsed.scripts.length+' scripts'):' · standalone');
   }catch(e){ BOT.bin=null; stat.innerHTML='<span class="bad">✕ '+e.message+'</span>'; dis.textContent=''; }
 }
 $('#botOpen').addEventListener('click',()=>{ if(!$('#botSrc').value)$('#botSrc').value=BOT_TPL.adaptive; botCompile(); $('#bot').classList.add('on'); });
@@ -3689,17 +3689,17 @@ document.querySelectorAll('#bot .chip[data-tpl]').forEach(c=>c.addEventListener(
 $('#botMerge').addEventListener('change',async e=>{
   if(e.target.checked){
     try{ const buf=await readGameFile('scripts\\aiscript.bin'); BOT.base=new Uint8Array(buf);
-      $('#botMergeInfo').textContent='stock aiscript.bin įkeltas: '+BOT.base.length+' B.'; }
+      $('#botMergeInfo').textContent='stock aiscript.bin loaded: '+BOT.base.length+' B.'; }
     catch(err){ BOT.base=null; e.target.checked=false;
-      $('#botMergeInfo').innerHTML='<span class="bad">nepavyko: '+err.message+' — atverk MPQ/CASC.</span>'; }
+      $('#botMergeInfo').innerHTML='<span class="bad">failed: '+err.message+' — open MPQ/CASC.</span>'; }
   } else { BOT.base=null; $('#botMergeInfo').textContent=''; }
   botCompile();
 });
-$('#botDl').addEventListener('click',()=>{ if(!BOT.bin){ setStatus('Pirma sukompiliuok švarų botą.',true); return; }
+$('#botDl').addEventListener('click',()=>{ if(!BOT.bin){ setStatus('Compile a clean bot first.',true); return; }
   const url=URL.createObjectURL(new Blob([BOT.bin],{type:'application/octet-stream'})); dl(url,'aiscript.bin'); URL.revokeObjectURL(url);
   setStatus('Eksportuota <b>aiscript.bin</b> ('+BOT.bin.length+' B).'); });
-$('#botToMod').addEventListener('click',()=>{ if(!BOT.bin){ setStatus('Pirma sukompiliuok švarų botą.',true); return; }
-  modAdd('scripts/aiscript.bin','botų kūrėjas'+($('#botMerge').checked?' (merge)':' (standalone)'),BOT.bin);
+$('#botToMod').addEventListener('click',()=>{ if(!BOT.bin){ setStatus('Compile a clean bot first.',true); return; }
+  modAdd('scripts/aiscript.bin','bot builder'+($('#botMerge').checked?' (merge)':' (standalone)'),BOT.bin);
   // bot packaging: prefill the mod manifest as a bot mod (from the build order if one is loaded)
   $('#modType').value='bot';
   if(BOT.lib){ const bo=BOT.lib;
@@ -3711,7 +3711,7 @@ $('#botToMod').addEventListener('click',()=>{ if(!BOT.bin){ setStatus('Pirma suk
     $('#modName').value='Training Bot'; $('#modId').value='training-bot';
   }
   $('#bot').classList.remove('on'); modRender(); $('#mod').classList.add('on');
-  setStatus('Botas supakuotas → Mod Builder (<b>type: bot</b>, data/scripts/aiscript.bin'+(BOT.lib?', aprašymas iš build order':'')+').'); });
+  setStatus('Bot packaged → Mod Builder (<b>type: bot</b>, data/scripts/aiscript.bin'+(BOT.lib?', description from the build order':'')+').'); });
 
 /* ---- Build-order library: card -> compilable tactic + spec panel ---- */
 const BO_UPG=/\b(range|speed|mode|mines?|pack|upgrade|carapace|attack|maelstrom)\b/i;
@@ -3732,16 +3732,16 @@ function boCount(nm){ if(/^pump/i.test(nm))return 20; const m=nm.match(/^(\d+)(?
   if(m)return (m[2]&&/^\d+$/.test(m[2]))?+m[2]:+m[1]; return 1; }
 const BO_NONARMY=new Set(['SCV','Probe','Drone','Overlord']);
 function boGenTactic(bo){
-  const L=['# '+bo.name+' '+bo.matchup+' — sugeneruota iš build order (Miro).',
-    '# Gamyba paimta iš kortelės; supply/darbininkų laiką tvarko AI town-management.',
-    '# Upgrade\'ai/veiksmai rodomi komentaruose (jų aiscript town-AI dažnai netvarko).',
+  const L=['# '+bo.name+' '+bo.matchup+' — generated from build order (Miro).',
+    '# Production taken from the card; supply/worker timing handled by the AI town-management.',
+    '# Upgrades/actions shown in comments (the aiscript town-AI often does not handle them).',
     'start_town','start_areatown','farms_timing','transports_off'];
   const bcount={},tcount={}; const army=[];
   for(const row of bo.build){
-    if(row.action){ L.push('# ['+row.name+'] — veiksmas'); continue; }
+    if(row.action){ L.push('# ['+row.name+'] — action'); continue; }
     if(BO_UPG.test(row.name)){ L.push('# ['+row.name+'] — upgrade'); continue; }
     const core=boNormalize(row.name);
-    if(!(core in UNIT_IDS.names)){ L.push('# ['+row.name+'] — ID nerastas'); continue; }
+    if(!(core in UNIT_IDS.names)){ L.push('# ['+row.name+'] — ID not found'); continue; }
     const id=UNIT_IDS.names[core], kind=UNIT_IDS.kinds[core], cnt=Math.max(1,boCount(row.name));
     if(kind==='building'){ bcount[id]=(bcount[id]||0)+cnt; L.push('build '+bcount[id]+' '+id+' 100  # '+row.name); }
     else { tcount[id]=Math.max(tcount[id]||0,cnt); if(!BO_NONARMY.has(core)&&!army.includes(id))army.push(id);
@@ -3749,7 +3749,7 @@ function boGenTactic(bo){
   }
   L.push(':main');
   if(army.length){ L.push('attack_clear'); for(const id of army)L.push('attack_add 12 '+id); L.push('attack_prepare','attack_do'); }
-  else L.push('# (kortelėje nėra kovinių unitų — makro botas; gynybą tvarko AI)');
+  else L.push('# (no combat units on the card — macro bot; defense handled by AI)');
   L.push('wait 600','goto main');
   return L.join('\n');
 }
@@ -3766,8 +3766,8 @@ function boRenderSpec(bo){
     '<div class="desc">'+bo.description+'</div>'+
     '<div class="grid2"><div><div class="sect">Countered by</div>'+tags(bo.countered_by)+'</div>'+
     '<div><div class="sect">Counter to</div>'+tags(bo.counter_to)+'</div></div>'+
-    '<div class="grid2"><div><div class="sect">Geri žemėlapiai</div>'+tags(bo.notable_maps&&bo.notable_maps.good)+'</div>'+
-    '<div><div class="sect">Blogi žemėlapiai</div>'+tags(bo.notable_maps&&bo.notable_maps.bad)+'</div></div>'+
+    '<div class="grid2"><div><div class="sect">Good maps</div>'+tags(bo.notable_maps&&bo.notable_maps.good)+'</div>'+
+    '<div><div class="sect">Bad maps</div>'+tags(bo.notable_maps&&bo.notable_maps.bad)+'</div></div>'+
     '<div class="sect" style="margin-top:10px">Build order</div><div class="steps">'+steps+'</div></div>';
 }
 (function botLibInit(){
@@ -3786,7 +3786,7 @@ $('#botLib').addEventListener('change',e=>{
   boRenderSpec(bo); botCompile();
 });
 
-/* ========================= DAT editorius ========================= */
+/* ========================= DAT editor ========================= */
 /* JS twin of tools/dat.py. Field tables generated from the Python spec (same
    ordering/widths/counts), so the SoA layout is identical; round-trip is
    byte-exact (verified sha-equal to Python). Offsets are resolved from field
@@ -3802,9 +3802,9 @@ const DAT_COMMON={
  'units.dat':['hitpoints','shield_amount','armor','armor_upgrade','sight_range','target_acquisition_range','mineral_cost','vespene_cost','build_time','supply_provided','supply_required','space_required','ground_weapon','air_weapon','unit_size'],
  'weapons.dat':['damage_amount','damage_bonus','damage_factor','weapon_cooldown','min_range','max_range','inner_splash_range','median_splash_range','outer_splash_range','damage_upgrade','weapon_type','weapon_behavior']};
 function datParse(kind,u8){
-  const spec=DAT_SPECS[kind]; if(!spec)throw new Error('nežinomas dat '+kind);
+  const spec=DAT_SPECS[kind]; if(!spec)throw new Error('unknown dat '+kind);
   const [fr,count,expect]=spec;
-  if(u8.length!==expect)throw new Error(kind+': tikėtasi '+expect+' B, gauta '+u8.length);
+  if(u8.length!==expect)throw new Error(kind+': expected '+expect+' B, got '+u8.length);
   const fields=fr.map(a=>({name:a[0],w:a[1],count:a[2],base:a[3],scale:a[4],offset:-1}));
   let off=0; for(const f of fields){ f.offset=off; off+=f.w*f.count; }
   const byName={}; fields.forEach(f=>byName[f.name]=f);
@@ -3812,7 +3812,7 @@ function datParse(kind,u8){
   return {kind,count,fields,byName,u8,dv,
     get(n,id){const f=byName[n]; if(!f||id<f.base||id>=f.base+f.count)return null;
       const p=f.offset+(id-f.base)*f.w; return f.w===1?dv.getUint8(p):f.w===2?dv.getUint16(p,true):dv.getUint32(p,true);},
-    set(n,id,v){const f=byName[n]; if(!f||id<f.base||id>=f.base+f.count)throw new Error('laukas '+n+' nedengia id '+id);
+    set(n,id,v){const f=byName[n]; if(!f||id<f.base||id>=f.base+f.count)throw new Error('field '+n+' does not cover id '+id);
       const p=f.offset+(id-f.base)*f.w, val=(v>>>0);
       if(f.w===1)dv.setUint8(p,val&0xff); else if(f.w===2)dv.setUint16(p,val&0xffff,true); else dv.setUint32(p,val>>>0,true);},
     display(n,id){const r=this.get(n,id); if(r===null)return null; const f=byName[n]; return f.scale!==1?Math.floor(r/f.scale):r;},
@@ -3851,7 +3851,7 @@ function datRenderList(){
   }
   $('#datCount').textContent=shown;
   let bytes=0; for(let i=0;i<DATE.doc.u8.length;i++)if(DATE.doc.u8[i]!==DATE.stock.u8[i])bytes++;
-  $('#datStat').textContent=chg.size+' pakeisti · '+bytes+' B';
+  $('#datStat').textContent=chg.size+' changed · '+bytes+' B';
 }
 function datSelect(id){
   DATE.sel=id; $$('#datList .erow').forEach(r=>r.classList.toggle('on',+r.querySelector('.eid').textContent===id));
@@ -3887,27 +3887,27 @@ function datRenderChain(id){
   const host=$('#datChain'); host.innerHTML='';
   if(DATE.kind!=='units.dat'){ return; }
   if(!DGRAPH.images){ datLoadGraph().then(ok=>{ if(ok&&DATE.sel===id&&DATE.kind==='units.dat')datRenderChain(id); });
-    host.innerHTML='<div class="cc" style="color:var(--ink-dim)">Grafikos grandinė kraunama… (reikia atverto MPQ/CASC)</div>'; return; }
+    host.innerHTML='<div class="cc" style="color:var(--ink-dim)">Graphics chain loading… (needs an open MPQ/CASC)</div>'; return; }
   const c=datChainResolve(id); if(!c){ return; }
   const path=c.grp_name?('unit\\'+c.grp_name):'?';
   host.innerHTML='<div class="cc"><div class="hop">unit <b>'+id+'</b> → flingy <b>'+c.flingy+
     '</b> → sprite <b>'+c.sprite+'</b> → image <b>'+c.image+'</b> → grp_file <b>'+c.grp_file+
     '</b></div><div class="grp" style="margin-top:3px">SD GRP: '+(c.grp_name||'—')+'</div>'+
-    '<div class="hop" style="margin-top:2px" title="SD↔HD tiltas: image id → anim/main_NNN.anim; SD kadras i ↔ HD kadras i (išmatuota 214/214 unitų, 0 neatitikimų — tools/sd_hd_bridge.py)">HD ANIM: <b>anim/main_'+String(c.image).padStart(3,'0')+'.anim</b> · SD kadras i ↔ HD kadras i (×4 HD)</div>'+
-    '<button id="datReskin">🎨 Perpiešti šį spriteą (→ Sprite importeris)</button> '+
-    '<button id="datRetarget" title="nukreipti į kitą images.tbl GRP (keičia images.dat)">↪ grp_file</button>'+
+    '<div class="hop" style="margin-top:2px" title="SD↔HD bridge: image id → anim/main_NNN.anim; SD frame i ↔ HD frame i (measured 214/214 units, 0 mismatches — tools/sd_hd_bridge.py)">HD ANIM: <b>anim/main_'+String(c.image).padStart(3,'0')+'.anim</b> · SD frame i ↔ HD frame i (×4 HD)</div>'+
+    '<button id="datReskin">🎨 Redraw this sprite (→ Sprite importer)</button> '+
+    '<button id="datRetarget" title="retarget to a different images.tbl GRP (changes images.dat)">↪ grp_file</button>'+
     '</div>';
-  $('#datReskin').onclick=()=>{ if(!c.grp_name){ setStatus('Šis unitas neturi GRP grandinės.',true); return; }
+  $('#datReskin').onclick=()=>{ if(!c.grp_name){ setStatus('This unit has no GRP chain.',true); return; }
     $('#dat').classList.remove('on'); $('#spr').classList.add('on');
     $('#sprPath').value=path; sprRender();
-    setStatus('Sprite importeris kelias nustatytas: <b>data/'+path.replace(/\\/g,'/').toLowerCase()+'</b> — įkelk PNG.'); };
+    setStatus('Sprite importer path set: <b>data/'+path.replace(/\\/g,'/').toLowerCase()+'</b> — load a PNG.'); };
   $('#datRetarget').onclick=()=>{
-    const v=prompt('Naujas images.tbl GRP indeksas (1..'+DGRAPH.tbl.length+') image\'ui '+c.image+':',c.grp_file);
-    if(v===null)return; const gi=parseInt(v,10); if(!(gi>=1&&gi<=DGRAPH.tbl.length)){ setStatus('Blogas indeksas.',true); return; }
+    const v=prompt('New images.tbl GRP index (1..'+DGRAPH.tbl.length+') for image '+c.image+':',c.grp_file);
+    if(v===null)return; const gi=parseInt(v,10); if(!(gi>=1&&gi<=DGRAPH.tbl.length)){ setStatus('Bad index.',true); return; }
     DGRAPH.images.set('grp_file',c.image,gi);
-    modAdd('arr/images.dat','DAT grandinė (retarget)',DGRAPH.images.toBytes());
+    modAdd('arr/images.dat','DAT chain (retarget)',DGRAPH.images.toBytes());
     datRenderChain(id);
-    setStatus('image '+c.image+' → GRP '+DGRAPH.tbl[gi-1]+'. images.dat pridėtas į Mod Builder.'); };
+    setStatus('image '+c.image+' → GRP '+DGRAPH.tbl[gi-1]+'. images.dat added to Mod Builder.'); };
 }
 function datRenderFields(id){
   const d=DATE.doc,s=DATE.stock; const tb=$('#datFields'); tb.innerHTML='';
@@ -3932,12 +3932,12 @@ function datListMark(id){ // refresh the ● marker + counters without full rebu
     let m=r.querySelector('.dmark'); if(chg.has(i)){ if(!m){m=document.createElement('span');m.className='dmark';m.style.cssText='color:#8fd15a;margin-left:auto';m.textContent='●';r.appendChild(m);} }
     else if(m)m.remove(); });
   let bytes=0; for(let i=0;i<DATE.doc.u8.length;i++)if(DATE.doc.u8[i]!==DATE.stock.u8[i])bytes++;
-  $('#datStat').textContent=chg.size+' pakeisti · '+bytes+' B';
+  $('#datStat').textContent=chg.size+' changed · '+bytes+' B';
 }
 $('#datOpen').addEventListener('click',async()=>{
   try{ if(!DATE.doc||DATE.kind!==$('#datKind').value) await datLoad($('#datKind').value);
     else datRenderList(); $('#dat').classList.add('on'); }
-  catch(e){ setStatus('DAT: '+e.message+' — atverk MPQ/CASC.',true); }
+  catch(e){ setStatus('DAT: '+e.message+' — open MPQ/CASC.',true); }
 });
 $('#datClose').addEventListener('click',()=>$('#dat').classList.remove('on'));
 $('#datKind').addEventListener('change',async e=>{ try{ await datLoad(e.target.value); }catch(err){ setStatus('DAT: '+err.message,true); } });
@@ -3946,13 +3946,13 @@ $('#datAllFields').addEventListener('change',()=>{ if(DATE.sel>=0)datRenderField
 $('#datRevert').addEventListener('click',()=>{ if(!DATE.doc||DATE.sel<0)return; const id=DATE.sel;
   for(const f of DATE.doc.fields){ if(id>=f.base&&id<f.base+f.count)DATE.doc.set(f.name,id,DATE.stock.get(f.name,id)); }
   datRenderFields(id); datListMark(id); });
-$('#datDl').addEventListener('click',()=>{ if(!DATE.doc){ setStatus('Pirma įkelk DAT.',true); return; }
+$('#datDl').addEventListener('click',()=>{ if(!DATE.doc){ setStatus('Load DAT first.',true); return; }
   const url=URL.createObjectURL(new Blob([DATE.doc.toBytes()],{type:'application/octet-stream'})); dl(url,DATE.kind); URL.revokeObjectURL(url);
-  setStatus('Eksportuota <b>'+DATE.kind+'</b> ('+DATE.doc.u8.length+' B).'); });
-$('#datToMod').addEventListener('click',()=>{ if(!DATE.doc){ setStatus('Pirma įkelk DAT.',true); return; }
-  modAdd('arr/'+DATE.kind,'DAT editorius',DATE.doc.toBytes());
+  setStatus('Exported <b>'+DATE.kind+'</b> ('+DATE.doc.u8.length+' B).'); });
+$('#datToMod').addEventListener('click',()=>{ if(!DATE.doc){ setStatus('Load DAT first.',true); return; }
+  modAdd('arr/'+DATE.kind,'DAT editor',DATE.doc.toBytes());
   $('#dat').classList.remove('on'); modRender(); $('#mod').classList.add('on');
-  setStatus('DAT → Mod Builder kaip <b>data/arr/'+DATE.kind+'</b>.'); });
+  setStatus('DAT → Mod Builder as <b>data/arr/'+DATE.kind+'</b>.'); });
 
 // ---- TBL string-table editor (browser twin of tools/tbl.py) ----
 // raw[i] = the FULL slice to the next offset (keeps stat_txt's extended NUL-parts);
@@ -3999,9 +3999,9 @@ async function tblLoad(path){
   TBLE.doc=tblParseFull(buf);TBLE.path=path;TBLE.sel=-1;
   TBLE.stock=TBLE.doc.raw.map(r=>r.slice());
   const bi=tblToBytes(TBLE.doc).length===buf.length && tblToBytes(TBLE.doc).every((v,i)=>v===buf[i]);
-  $('#tblStat').innerHTML=TBLE.doc.count+' įrašų · '+buf.length+' B · round-trip '+(bi?'✓ byte-identiškas':'≈ semantinis');
+  $('#tblStat').innerHTML=TBLE.doc.count+' entries · '+buf.length+' B · round-trip '+(bi?'✓ byte-identical':'≈ semantic');
   $('#tblCount').textContent=TBLE.doc.count;tblRenderList();
-  $('#tblEdit').innerHTML='Pasirink įrašą kairėje.';$('#tblTitle').textContent='—';
+  $('#tblEdit').innerHTML='Select an entry on the left.';$('#tblTitle').textContent='—';
 }
 function tblChanged(i){const a=TBLE.doc.raw[i],b=TBLE.stock[i];if(a.length!==b.length)return true;for(let k=0;k<a.length;k++)if(a[k]!==b[k])return true;return false;}
 function tblRenderList(){
@@ -4012,7 +4012,7 @@ function tblRenderList(){
     if(q&&!(nm.toLowerCase().includes(q)||(''+i).includes(q)))continue;
     const extra=d.raw[i].length-nm.length-1;
     const row=document.createElement('div');row.className='erow'+(i===TBLE.sel?' on':'')+(tblChanged(i)?' changed':'');
-    row.innerHTML='<span class="eid">'+i+'</span><span class="etx"></span>'+(extra>0?'<span class="ext" title="'+extra+' papildomų baitų (tooltip/hotkey) išsaugoma">+'+extra+'</span>':'');
+    row.innerHTML='<span class="eid">'+i+'</span><span class="etx"></span>'+(extra>0?'<span class="ext" title="'+extra+' extra bytes (tooltip/hotkey) preserved">+'+extra+'</span>':'');
     row.querySelector('.etx').textContent=nm||'∅';
     row.addEventListener('click',()=>tblSelect(i));frag.appendChild(row);
   }
@@ -4022,10 +4022,10 @@ function tblSelect(i){TBLE.sel=i;tblRenderList();tblRenderEdit(i);}
 function tblRenderEdit(i){
   const d=TBLE.doc,nm=d.strings[i],extra=d.raw[i].length-nm.length-1;
   $('#tblTitle').textContent='#'+i+(TBLE.path.includes('stat_txt')?' — '+(nm||'∅'):'');
-  const note=extra>0?'<div class="note">Šis įrašas turi <b>'+extra+' papildomų baitų</b> po vardo (tooltip / spartusis klavišas / išplėstinis tekstas) — jie <b>išsaugomi</b> keičiant tik vardą.</div>':'';
-  $('#tblEdit').innerHTML='<label style="font-size:11px;color:var(--ink-dim)">Tekstas (vardas)</label>'+
+  const note=extra>0?'<div class="note">This entry has <b>'+extra+' extra bytes</b> after the name (tooltip / hotkey / extended text) — they are <b>preserved</b> when you change only the name.</div>':'';
+  $('#tblEdit').innerHTML='<label style="font-size:11px;color:var(--ink-dim)">Text (name)</label>'+
     '<textarea id="tblText" spellcheck="false"></textarea>'+note+
-    '<div class="note">Rodyklė žaidime paprastai 1-based: šis įrašas = string #'+(i+1)+'.</div>';
+    '<div class="note">The in-game index is usually 1-based: this entry = string #'+(i+1)+'.</div>';
   const ta=$('#tblText');ta.value=nm;
   ta.addEventListener('input',()=>{tblSetText(d,i,ta.value);$('#tblTitle').textContent='#'+i+(TBLE.path.includes('stat_txt')?' — '+(ta.value||'∅'):'');
     const row=[...$('#tblList').children].find(r=>r.querySelector('.eid')&&r.querySelector('.eid').textContent==(''+i));
@@ -4034,7 +4034,7 @@ function tblRenderEdit(i){
 $('#tblOpen').addEventListener('click',async()=>{
   try{ if(!TBLE.doc||TBLE.path!==$('#tblKind').value) await tblLoad($('#tblKind').value);
     else tblRenderList(); $('#tbl').classList.add('on'); }
-  catch(e){ setStatus('TBL: '+e.message+' — atverk MPQ/CASC.',true); }
+  catch(e){ setStatus('TBL: '+e.message+' — open MPQ/CASC.',true); }
 });
 $('#tblClose').addEventListener('click',()=>$('#tbl').classList.remove('on'));
 $('#tblKind').addEventListener('change',async e=>{ try{ await tblLoad(e.target.value); }catch(err){ setStatus('TBL: '+err.message,true); } });
@@ -4042,15 +4042,15 @@ $('#tblSearch').addEventListener('input',tblRenderList);
 $('#tblRevert').addEventListener('click',()=>{ if(!TBLE.doc||TBLE.sel<0)return; const i=TBLE.sel;
   TBLE.doc.raw[i]=TBLE.stock[i].slice(); let e=0;const r=TBLE.doc.raw[i];while(e<r.length&&r[e])e++;
   TBLE.doc.strings[i]=new TextDecoder('latin1').decode(r.subarray(0,e)); tblRenderList(); tblRenderEdit(i); });
-$('#tblDl').addEventListener('click',()=>{ if(!TBLE.doc){ setStatus('Pirma įkelk TBL.',true); return; }
+$('#tblDl').addEventListener('click',()=>{ if(!TBLE.doc){ setStatus('Load TBL first.',true); return; }
   const name=TBLE.path.split(/[\\/]/).pop(); const url=URL.createObjectURL(new Blob([tblToBytes(TBLE.doc)],{type:'application/octet-stream'})); dl(url,name); URL.revokeObjectURL(url);
-  setStatus('Eksportuota <b>'+name+'</b> ('+tblToBytes(TBLE.doc).length+' B).'); });
-$('#tblToMod').addEventListener('click',()=>{ if(!TBLE.doc){ setStatus('Pirma įkelk TBL.',true); return; }
-  const p=TBLE.path.replace(/\\/g,'/'); modAdd(p,'TBL editorius',tblToBytes(TBLE.doc));
+  setStatus('Exported <b>'+name+'</b> ('+tblToBytes(TBLE.doc).length+' B).'); });
+$('#tblToMod').addEventListener('click',()=>{ if(!TBLE.doc){ setStatus('Load TBL first.',true); return; }
+  const p=TBLE.path.replace(/\\/g,'/'); modAdd(p,'TBL editor',tblToBytes(TBLE.doc));
   $('#tbl').classList.remove('on'); modRender(); $('#mod').classList.add('on');
-  setStatus('TBL → Mod Builder kaip <b>data/'+p+'</b>.'); });
+  setStatus('TBL → Mod Builder as <b>data/'+p+'</b>.'); });
 
-/* ========================= Sprite importeris ========================= */
+/* ========================= Sprite importer ========================= */
 /* JS twin of tools/grp.py — encode indexed frames to a classic RLE GRP and
    decode it back for preview. Same RLE (skip/run/literal) + frame dedup, so the
    in-browser preview is the pixel round-trip the Python oracle proves. */
@@ -4130,7 +4130,7 @@ function sprRender(){
     const rm=document.createElement('span'); rm.textContent='✕'; rm.style.cssText='color:var(--red);cursor:pointer';
     rm.onclick=()=>{ SPR.frames.splice(i,1); sprRender(); }; row.appendChild(rm);
     host.appendChild(row); });
-  if(oversize)setStatus('GRP kadras negali viršyti 255×255 — sumažink PNG.',true);
+  if(oversize)setStatus('A GRP frame cannot exceed 255×255 — shrink the PNG.',true);
   sprPreview();
 }
 function sprPreview(){
@@ -4139,7 +4139,7 @@ function sprPreview(){
   const dec=grpDecode(built.bin);
   dec.frames.forEach(fr=>{ const cell=document.createElement('div'); cell.className='cell';
     cell.appendChild(sprDrawPx(fr.px,fr.w,fr.h,built.pal,3)); host.appendChild(cell); });
-  $('#sprStat').textContent=dec.frames.length+' kadrai · '+built.cw+'×'+built.ch+' · '+built.bin.length+' B';
+  $('#sprStat').textContent=dec.frames.length+' frames · '+built.cw+'×'+built.ch+' · '+built.bin.length+' B';
   SPR.bin=built.bin;
 }
 function loadImg(file){ return new Promise((res,rej)=>{ const img=new Image(); img.onload=()=>{URL.revokeObjectURL(img.src);res(img);}; img.onerror=rej; img.src=URL.createObjectURL(file); }); }
@@ -4151,29 +4151,29 @@ $('#sprPng').addEventListener('change',async e=>{ const files=[...e.target.files
     const ctx=cv.getContext('2d'); ctx.drawImage(img,0,0);
     const rgba=ctx.getImageData(0,0,cv.width,cv.height).data;
     SPR.frames.push({name:file.name,w:cv.width,h:cv.height,rgba,x:0,y:0});
-  }catch(err){ setStatus('Nepavyko įkelti '+file.name,true); } }
+  }catch(err){ setStatus('Failed to load '+file.name,true); } }
   e.target.value=''; sprRender(); });
 $('#sprPalUnit').addEventListener('click',async()=>{
   try{ const buf=await readGameFile('unit\\tunit.pcx'); const pal=parsePaletteFile(buf,'tunit.pcx');
-    if(!pal)throw new Error('nepavyko atpažinti'); SPR.pal=pal;
-    $('#sprPalInfo').innerHTML='<span class="ok" style="color:#5ad18a">unit paletė iš tunit.pcx</span>'; sprRender(); }
-  catch(err){ setStatus('Unit paletė: '+err.message+' — atverk MPQ/CASC.',true); } });
+    if(!pal)throw new Error('could not recognize'); SPR.pal=pal;
+    $('#sprPalInfo').innerHTML='<span class="ok" style="color:#5ad18a">unit palette from tunit.pcx</span>'; sprRender(); }
+  catch(err){ setStatus('Unit palette: '+err.message+' — open MPQ/CASC.',true); } });
 $('#sprPalFile').addEventListener('change',e=>{ const f=e.target.files[0]; if(!f)return;
   const r=new FileReader(); r.onload=()=>{ const pal=parsePaletteFile(r.result,f.name);
-    if(pal){ SPR.pal=pal; $('#sprPalInfo').textContent='paletė: '+f.name; sprRender(); }
-    else setStatus('Nepavyko atpažinti paletės: '+f.name,true); };
+    if(pal){ SPR.pal=pal; $('#sprPalInfo').textContent='palette: '+f.name; sprRender(); }
+    else setStatus('Could not recognize palette: '+f.name,true); };
   r.readAsArrayBuffer(f); e.target.value=''; });
-$('#sprDl').addEventListener('click',()=>{ const b=sprBuild(); if(!b){ setStatus('Pirma įkelk PNG kadrus.',true); return; }
+$('#sprDl').addEventListener('click',()=>{ const b=sprBuild(); if(!b){ setStatus('Load PNG frames first.',true); return; }
   const nm=($('#sprPath').value.split(/[\\/]/).pop()||'sprite.grp');
   const url=URL.createObjectURL(new Blob([b.bin],{type:'application/octet-stream'})); dl(url,nm); URL.revokeObjectURL(url);
-  setStatus('Eksportuota <b>'+nm+'</b> ('+b.bin.length+' B, '+b.gframes.length+' kadrai).'); });
-$('#sprToMod').addEventListener('click',()=>{ const b=sprBuild(); if(!b){ setStatus('Pirma įkelk PNG kadrus.',true); return; }
+  setStatus('Exported <b>'+nm+'</b> ('+b.bin.length+' B, '+b.gframes.length+' frames).'); });
+$('#sprToMod').addEventListener('click',()=>{ const b=sprBuild(); if(!b){ setStatus('Load PNG frames first.',true); return; }
   const gp=$('#sprPath').value.trim()||'unit\\custom.grp';
-  modAdd(gp,'sprite importeris (GRP)',b.bin);
+  modAdd(gp,'sprite importer (GRP)',b.bin);
   $('#spr').classList.remove('on'); modRender(); $('#mod').classList.add('on');
-  setStatus('Sprite → Mod Builder kaip <b>data/'+gp.replace(/\\/g,'/').toLowerCase()+'</b>.'); });
+  setStatus('Sprite → Mod Builder as <b>data/'+gp.replace(/\\/g,'/').toLowerCase()+'</b>.'); });
 
-/* ========================= iscript peržiūra ========================= */
+/* ========================= iscript viewer ========================= */
 /* Opcode table + header map GENERATED from tools/iscript/iscript_opcodes.py
    (itself cut from PyMS IScriptBIN.py). Disasm mirrors tools/iscript/
    iscript_disasm.py; the same coverage oracle (398 scripts / 9763 opcodes clean)
@@ -4227,10 +4227,10 @@ function iscEditArg(addr,k){
   const cur=a.v, max=(1<<(8*a.sz))-1;
   const v=prompt(a.t+' (0..'+max+') ties 0x'+addr.toString(16)+':',cur);
   if(v===null)return; let nv=/^0x/i.test(v)?parseInt(v,16):parseInt(v,10);
-  if(Number.isNaN(nv)||nv<0||nv>max){ setStatus('Bloga reikšmė (0..'+max+').',true); return; }
+  if(Number.isNaN(nv)||nv<0||nv>max){ setStatus('Bad value (0..'+max+').',true); return; }
   for(let b=0;b<a.sz;b++)d[o+b]=(nv>>(8*b))&0xff;
   ISC.edited=true; iscSelect(ISC.sel);
-  $('#iscStat').innerHTML=ISC.doc.entries.length+' scriptai · <span style="color:#8fd15a">redaguota</span>';
+  $('#iscStat').innerHTML=ISC.doc.entries.length+' scripts · <span style="color:#8fd15a">edited</span>';
 }
 function iscRenderList(){
   if(!ISC.doc)return; const q=($('#iscSearch').value||'').trim();
@@ -4267,20 +4267,20 @@ $('#iscOpen').addEventListener('click',async()=>{
       // in-browser coverage sanity
       let ops=0,anims=0,bad=0; for(const e of ISC.doc.entries){ for(const [,off] of e.anims){ if(!off)continue; anims++;
         try{ ops+=iscTrace(ISC.doc.d,off,ISC.doc.idTable).size; }catch(e){ bad++; } } }
-      $('#iscStat').textContent=ISC.doc.entries.length+' scriptai · '+anims+' anim · '+(bad?bad+' DESYNC':'coverage OK');
-    }catch(err){ setStatus('iscript: '+err.message+' — atverk MPQ/CASC.',true); return; } }
+      $('#iscStat').textContent=ISC.doc.entries.length+' scripts · '+anims+' anim · '+(bad?bad+' DESYNC':'coverage OK');
+    }catch(err){ setStatus('iscript: '+err.message+' — open MPQ/CASC.',true); return; } }
   iscRenderList(); if(ISC.doc.entries.length)iscSelect(ISC.doc.entries[0].id); $('#isc').classList.add('on');
 });
 $('#iscClose').addEventListener('click',()=>$('#isc').classList.remove('on'));
 $('#iscSearch').addEventListener('input',iscRenderList);
 function iscBytes(){ return ISC.doc.d.slice(); }
-$('#iscDl').addEventListener('click',()=>{ if(!ISC.doc){ setStatus('Pirma atverk iscript.bin.',true); return; }
+$('#iscDl').addEventListener('click',()=>{ if(!ISC.doc){ setStatus('Open iscript.bin first.',true); return; }
   const url=URL.createObjectURL(new Blob([iscBytes()],{type:'application/octet-stream'})); dl(url,'iscript.bin'); URL.revokeObjectURL(url);
-  setStatus('Eksportuota <b>iscript.bin</b> ('+ISC.doc.d.length+' B'+(ISC.edited?', redaguota':'')+').'); });
-$('#iscToMod').addEventListener('click',()=>{ if(!ISC.doc){ setStatus('Pirma atverk iscript.bin.',true); return; }
-  modAdd('scripts/iscript.bin','iscript editorius'+(ISC.edited?' (redaguota)':''),iscBytes());
+  setStatus('Eksportuota <b>iscript.bin</b> ('+ISC.doc.d.length+' B'+(ISC.edited?', edited':'')+').'); });
+$('#iscToMod').addEventListener('click',()=>{ if(!ISC.doc){ setStatus('Open iscript.bin first.',true); return; }
+  modAdd('scripts/iscript.bin','iscript editor'+(ISC.edited?' (edited)':''),iscBytes());
   $('#isc').classList.remove('on'); $('#modType').value='data'; modRender(); $('#mod').classList.add('on');
-  setStatus('iscript → Mod Builder kaip <b>data/scripts/iscript.bin</b>.'); });
+  setStatus('iscript → Mod Builder as <b>data/scripts/iscript.bin</b>.'); });
 
 /* ---- iscript TEXT ASSEMBLER (twin of tools/iscript/iscript_gen.py) ---- */
 const ISC_OP_BY_NAME=(()=>{const m={};ISC_OPCODES.forEach((o,i)=>m[o.n]={op:i,a:o.a});return m;})();
@@ -4291,13 +4291,13 @@ function iscParseText(text){
     if(line.startsWith('.header')){ for(const t of line.split(/\s+/).slice(1)){
       if(t.startsWith('id='))iid=parseInt(t.slice(3),0)||parseInt(t.slice(3),10);
       else if(t.startsWith('type='))itype=parseInt(t.slice(5),10); }
-      if(!(itype in ISC_ENTRY_TYPES))throw new Error('eil.'+(li+1)+': type turi būti vienas iš '+Object.keys(ISC_ENTRY_TYPES).join(',')); return; }
+      if(!(itype in ISC_ENTRY_TYPES))throw new Error('line '+(li+1)+': type must be one of '+Object.keys(ISC_ENTRY_TYPES).join(',')); return; }
     if(line==='.code'){ section='code'; return; }
     if(section==='header'&&line.includes('->')){ const [n,l]=line.split('->').map(s=>s.trim());
-      if(!ISC_HEADER.includes(n))throw new Error('eil.'+(li+1)+': nežinoma animacija "'+n+'"'); animMap[n]=l; return; }
+      if(!ISC_HEADER.includes(n))throw new Error('line '+(li+1)+': unknown animation "'+n+'"'); animMap[n]=l; return; }
     if(line.endsWith(':')){ steps.push({label:line.slice(0,-1).trim()}); return; }
     const tok=line.split(/\s+/); const name=tok[0]; const spec=ISC_OP_BY_NAME[name];
-    if(!spec)throw new Error('eil.'+(li+1)+': nežinomas opcode "'+name+'"');
+    if(!spec)throw new Error('line '+(li+1)+': unknown opcode "'+name+'"');
     const args=[]; const ra=tok.slice(1); let ai=0;
     for(let k=0;k<spec.a.length;k++){ const [typ,sz]=spec.a[k];
       if(sz<0){ const cnt=parseInt(ra[ai++],0); args.push({t:'count',v:cnt,sz:1}); const [nt,nsz]=spec.a[k+1];
@@ -4306,16 +4306,16 @@ function iscParseText(text){
       else args.push({t:typ,v:parseInt(ra[ai++],0),sz}); }
     steps.push({op:name,args});
   });
-  if(iid===null||itype===null)throw new Error('trūksta ".header id=.. type=.."');
+  if(iid===null||itype===null)throw new Error('missing ".header id=.. type=.."');
   return {iid,itype,animMap,steps};
 }
 function iscAssembleEntry(p,base){
   const labels={}; let pos=base;
-  for(const s of p.steps){ if(s.label!==undefined){ if(s.label in labels)throw new Error('dubliuota etiketė "'+s.label+'"'); labels[s.label]=pos; }
+  for(const s of p.steps){ if(s.label!==undefined){ if(s.label in labels)throw new Error('duplicate label "'+s.label+'"'); labels[s.label]=pos; }
     else pos+=1+s.args.reduce((a,x)=>a+x.sz,0); }
   const codeLen=pos-base; const code=[];
   for(const s of p.steps){ if(s.label!==undefined)continue; const spec=ISC_OP_BY_NAME[s.op]; code.push(spec.op);
-    for(const a of s.args){ if(a.t==='label'){ if(!(a.v in labels))throw new Error('neapibrėžta etiketė "'+a.v+'"'); const v=labels[a.v]; code.push(v&0xff,(v>>8)&0xff); }
+    for(const a of s.args){ if(a.t==='label'){ if(!(a.v in labels))throw new Error('undefined label "'+a.v+'"'); const v=labels[a.v]; code.push(v&0xff,(v>>8)&0xff); }
       else { for(let b=0;b<a.sz;b++)code.push((a.v>>(8*b))&0xff); } } }
   const headerOff=base+codeLen; const hdr=[0x53,0x43,0x50,0x45,p.itype&0xff,0,0,0];
   const n=ISC_ENTRY_TYPES[p.itype];
@@ -4325,7 +4325,7 @@ function iscAssembleEntry(p,base){
 function iscMergeText(stockU8,text){
   const p=iscParseText(text); const dv=new DataView(stockU8.buffer,stockU8.byteOffset,stockU8.byteLength);
   const base=dv.getUint16(0,true); const {code,hdr,headerOff}=iscAssembleEntry(p,base);
-  const newTable=headerOff+hdr.length; if(newTable>0xffff)throw new Error('merged iscript.bin viršija u16 (>65535 B)');
+  const newTable=headerOff+hdr.length; if(newTable>0xffff)throw new Error('merged iscript.bin exceeds u16 (>65535 B)');
   const doc=iscParse(stockU8.buffer.slice(stockU8.byteOffset,stockU8.byteOffset+stockU8.byteLength));
   const out=[]; for(let i=0;i<base;i++)out.push(stockU8[i]);
   for(const b of code)out.push(b); for(const b of hdr)out.push(b);
@@ -4353,7 +4353,7 @@ $('#iscAsmToggle').addEventListener('click',()=>{
   const on=$('#iscAsm').style.display==='none'; $('#iscAsm').style.display=on?'block':'none'; $('#iscDis').style.display=on?'none':'block';
   if(on&&!$('#iscAsmText').value&&ISC.sel!=null){ const e=ISC.doc.entries.find(x=>x.id===ISC.sel); if(e)$('#iscAsmText').value=iscTextFromEntry(e); }
 });
-$('#iscAsmFromSel').addEventListener('click',()=>{ if(ISC.sel==null){ setStatus('Pirma pasirink scriptą.',true); return; }
+$('#iscAsmFromSel').addEventListener('click',()=>{ if(ISC.sel==null){ setStatus('Select a script first.',true); return; }
   const e=ISC.doc.entries.find(x=>x.id===ISC.sel); if(e)$('#iscAsmText').value=iscTextFromEntry(e); });
 $('#iscAsmCompile').addEventListener('click',()=>{
   const stat=$('#iscAsmStat');
@@ -4363,7 +4363,7 @@ $('#iscAsmCompile').addEventListener('click',()=>{
     for(const e of doc.entries)for(const [,off] of e.anims){ if(!off)continue; try{ for(const q of iscTrace(doc.d,off,doc.idTable))all.add(q); }catch(e){ bad++; } }
     if(bad){ stat.innerHTML='<span class="bad" style="color:#e0708a">✕ desync ('+bad+')</span>'; return; }
     ISC.doc=doc; ISC.edited=true; iscRenderList(); iscSelect(iid);
-    stat.innerHTML='<span class="ok" style="color:#5ad18a">✓ merge OK · id '+iid+' · '+bin.length+' B · '+all.size+' opcode\'ai clean</span>';
+    stat.innerHTML='<span class="ok" style="color:#5ad18a">✓ merge OK · id '+iid+' · '+bin.length+' B · '+all.size+' opcodes clean</span>';
   }catch(err){ stat.innerHTML='<span class="bad" style="color:#e0708a">✕ '+err.message+'</span>'; }
 });
 
@@ -4378,9 +4378,9 @@ function goHome(){
   $('#infoMsg').style.display='none';
   render();   // S.active null -> emptyState (dashboard) shown
 }
-(function(){ const lg=document.querySelector('.logo'); if(lg){ lg.style.cursor='pointer'; lg.title='Į pradžią (toolkit meniu)';
+(function(){ const lg=document.querySelector('.logo'); if(lg){ lg.style.cursor='pointer'; lg.title='Home (toolkit menu)';
   lg.addEventListener('click',goHome); } })();
-// header "Įrankiai" dropdown — reachable from any view; items trigger the same hidden buttons
+// header "Tools" dropdown — reachable from any view; items trigger the same hidden buttons
 (function(){
   const dd=$('#toolsDD'), tog=$('#toolsToggle');
   tog.addEventListener('click',e=>{ e.stopPropagation(); dd.classList.toggle('on'); });
@@ -4421,7 +4421,7 @@ function goHome(){
     const el=list.children[cur]; if(el&&el.scrollIntoView)el.scrollIntoView({block:'nearest'}); }
   function draw(){
     list.innerHTML='';
-    if(!view.length){ const e=document.createElement('div'); e.className='cmdk-empty'; e.textContent='nėra atitikmenų'; list.appendChild(e); return; }
+    if(!view.length){ const e=document.createElement('div'); e.className='cmdk-empty'; e.textContent='no matches'; list.appendChild(e); return; }
     cur=Math.max(0,Math.min(cur,view.length-1));
     view.forEach((it,i)=>{ const d=document.createElement('div'); d.className='cmdk-item'+(i===cur?' sel':'');
       const ic=document.createElement('span'); ic.className='ci'; ic.textContent=it.icon;
@@ -4449,4 +4449,4 @@ function goHome(){
 
 (function(){const el=document.getElementById('builtinListfile');
   if(el&&el.textContent){S.externalListfile=el.textContent.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);S.builtinListfile=true;}})();
-setStatus('Pasiruošęs. Pasirink įrankį arba atverk duomenis.');
+setStatus('Ready. Select a tool or open data.');

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Compile a pro build-order card (assets/build_orders.json) into a training-bot
-aiscript via ai_gen. The Python twin of the browser's Botų kūrėjas library.
+aiscript via ai_gen. The Python twin of the browser's Bot builder library.
 
 The build order is a HUMAN execution plan in supply-count terms. The aiscript VM
 has no "at supply N" gate, so this maps the ORDER: each producible row becomes a

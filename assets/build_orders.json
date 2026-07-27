@@ -2,7 +2,7 @@
   "_meta": {
     "source": "Miro build-order cards (V), transcribed 2026-07-24",
     "schema": "id, race(T/P/Z), name, matchup, aggression(0-10), economy(0-10), build[{name,supply,condition,note,action}], countered_by[], counter_to[], notable_maps{good[],bad[]}, description",
-    "note": "build steps are the human execution order in supply-count terms; the bot compiler maps building/unit rows to build/train opcodes (upgrades/actions shown but not compiled). See tools/ai/ai_gen.py + the browser Botų kūrėjas library."
+    "note": "build steps are the human execution order in supply-count terms; the bot compiler maps building/unit rows to build/train opcodes (upgrades/actions shown but not compiled). See tools/ai/ai_gen.py + the browser Bot builder library."
   },
   "build_orders": [
     {"id":"t-bunker-rush-vz","race":"T","name":"Bunker Rush","matchup":"VS Zerg","aggression":7,"economy":3,"build":[{"name":"Barracks","supply":8,"condition":null,"note":null,"action":false},{"name":"Supply Depot","supply":9,"condition":null,"note":null,"action":false},{"name":"Scout","supply":10,"condition":null,"note":null,"action":true},{"name":"Marine","supply":null,"condition":"100% Barracks","note":"Set Barracks rally on Zerg natural, push at 2 Marines","action":false},{"name":"Supply Depot","supply":15,"condition":null,"note":null,"action":false}],"countered_by":["4 Pool","9 Pool","12 Pool"],"counter_to":["12 Hatch"],"notable_maps":{"good":["Short Walking Distance","Two Player Maps"],"bad":["Long Walking Distance"]},"description":"Early aggressive build to damage a fast-expanding Zerg by killing Drones or the expansion. Usually an 8 Rax build; sometimes the all-in BBS."},

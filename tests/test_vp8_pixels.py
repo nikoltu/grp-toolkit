@@ -25,7 +25,7 @@ Run:
 
 Then, for check 2, serve the repo root and open tests/vp8-oracle.html; it
 loops over the exported frames and prints one PASS/FAIL line per file plus a
-total. The result as of 2026-07-22 is in tests/README.md.
+total.
 """
 import sys, os, json, argparse, hashlib
 from common import CASC_DATA, need, report
