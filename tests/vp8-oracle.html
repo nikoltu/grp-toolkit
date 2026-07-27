@@ -1,0 +1,113 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>VP8 pixel oracle</title>
+<style>
+ body{font:13px/1.5 ui-monospace,Consolas,monospace;margin:1.5rem;max-width:70rem}
+ h1{font-size:1.1rem} .pass{color:#127a2b} .fail{color:#b00}
+ #sum{font-weight:bold;margin:.8rem 0;padding:.5rem;background:#f4f4f4}
+ pre{white-space:pre-wrap}
+</style>
+<h1>VP8 keyframe decoder vs. libvpx</h1>
+<p>Compares <code>tools/vp8_decode.py</code>'s output against this browser's own
+VP8 decoder through WebCodecs, plane for plane in I420 — the codec's native
+colour space, so nothing is measured except the decode itself.</p>
+<p>The whole VP8 keyframe corpus is here — 633 frames, 490 of them loop-filtered
+(stage d). The Python side hashes its own I420 into <code>manifest.json</code>;
+this page decodes each keyframe with libvpx, hashes the result the same way, and
+compares digests. Everything ships in a single <code>keyframes.bin</code> fetch,
+because the preview proxy drops per-file requests under load.</p>
+<p>Run <code>py tests/test_vp8_pixels.py --export</code> first, then serve the
+repo root (<code>py tests/_serve.py</code>) and open this page.</p>
+<div id=sum>working…</div>
+<pre id=log></pre>
+<script>
+const SUM = document.getElementById('sum'), LOG = document.getElementById('log');
+
+async function grab(url, tries = 8) {
+  for (let i = 0; ; i++) {
+    try {
+      const r = await fetch(url);
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return new Uint8Array(await r.arrayBuffer());
+    } catch (e) {
+      if (i >= tries) throw e;
+      await new Promise(r => setTimeout(r, 200 * (i + 1)));
+    }
+  }
+}
+
+async function frameOf(kf) {
+  let out = null, err = null;
+  const dec = new VideoDecoder({output: f => { out = f; }, error: e => { err = e; }});
+  dec.configure({codec: 'vp8'});
+  dec.decode(new EncodedVideoChunk({type: 'key', timestamp: 0, data: kf}));
+  await dec.flush();
+  if (!out) throw new Error('libvpx returned no frame' + (err ? ': ' + err : ''));
+  return out;
+}
+
+// Repack the decoded frame into tight I420, cropped to the frame's declared
+// w x h. libvpx rounds an odd coded dimension up to even (three files are
+// 790x1159, reported as 790x1160), so we take the top-left w x h region to
+// match what the Python side writes. copyTo's stride is not the width.
+async function tightI420(frame, w, h) {
+  const cw = (w + 1) >> 1, ch = (h + 1) >> 1;
+  const buf = new Uint8Array(frame.allocationSize());
+  const layout = await frame.copyTo(buf);
+  const out = new Uint8Array(w * h + 2 * cw * ch);
+  const dims = [[w, h], [cw, ch], [cw, ch]];
+  let d = 0;
+  for (let p = 0; p < 3; p++) {
+    const o = layout[p].offset, s = layout[p].stride;
+    for (let y = 0; y < dims[p][1]; y++)
+      out.set(buf.subarray(o + y * s, o + y * s + dims[p][0]), d + y * dims[p][0]);
+    d += dims[p][0] * dims[p][1];
+  }
+  return out;
+}
+
+async function sha256hex(bytes) {
+  const d = await crypto.subtle.digest('SHA-256', bytes);
+  return [...new Uint8Array(d)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+(async () => {
+  if (!('VideoDecoder' in window)) {
+    SUM.textContent = 'This browser has no WebCodecs — cannot run.';
+    return;
+  }
+  const man = await (await fetch('_vp8cmp/manifest.json')).json();
+  const bin = await grab('_vp8cmp/keyframes.bin');   // one fetch for everything
+
+  let pass = 0, fail = 0;
+  const bad = [];
+  for (const e of man) {
+    try {
+      const kf = bin.subarray(e.off, e.off + e.len);
+      const frame = await frameOf(kf);
+      // libvpx may round an odd coded dimension up by one; accept that and
+      // crop, but reject any larger disagreement as a real size bug.
+      if (frame.codedWidth < e.w || frame.codedHeight < e.h ||
+          frame.codedWidth > e.w + 1 || frame.codedHeight > e.h + 1)
+        throw new Error(`size ${e.w}x${e.h} vs ${frame.codedWidth}x${frame.codedHeight}`);
+      const theirs = await tightI420(frame, e.w, e.h);
+      frame.close();
+      const hex = await sha256hex(theirs);
+      if (hex === e.sha) pass++;
+      else { fail++; bad.push(`DIFF  ${e.name}  ${e.w}x${e.h} lf=${e.lf}`); }
+    } catch (err) {
+      fail++;
+      bad.push(`ERR   ${e.name}  ${err.message}`);
+    }
+    if ((pass + fail) % 10 === 0 || fail) {
+      SUM.textContent = `${pass + fail} / ${man.length} … ${fail} differing`;
+      LOG.textContent = bad.join('\n');
+    }
+  }
+  SUM.className = fail ? 'fail' : 'pass';
+  SUM.textContent = fail
+    ? `FAIL  ${fail} of ${man.length} frames differ from libvpx`
+    : `PASS  ${pass} / ${man.length} keyframes byte-identical to libvpx`;
+  LOG.textContent = bad.join('\n');
+})();
+</script>

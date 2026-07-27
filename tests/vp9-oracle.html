@@ -1,0 +1,161 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>VP9 pixel oracle</title>
+<style>
+ body{font:13px/1.5 ui-monospace,Consolas,monospace;margin:1.5rem;max-width:70rem}
+ h1{font-size:1.1rem} .pass{color:#127a2b} .fail{color:#b00}
+ #sum{font-weight:bold;margin:.8rem 0;padding:.5rem;background:#f4f4f4}
+ pre{white-space:pre-wrap}
+</style>
+<h1>VP9 keyframe decoder vs. libvpx</h1>
+<p>Compares <code>tools/vp9_pixels.py</code> (stage 3b) against this browser's own
+VP9 decoder through WebCodecs, plane for plane in the codec's native buffer
+(I420 for 4:2:0, I444 for 4:4:4) — never RGB, so nothing is measured except the
+decode. Only <code>loop_filter_level == 0</code> frames are compared, because
+the loop filter is a later stage; libvpx's filter is a no-op on them.</p>
+<p>Run <code>py tests/test_vp9_pixels.py --export</code>, then serve the repo
+root (<code>py tests/_serve.py</code>) and open this page.</p>
+<div id=sum>working…</div>
+<pre id=log></pre>
+<script>
+const SUM = document.getElementById('sum'), LOG = document.getElementById('log');
+
+async function grab(url, tries = 8) {
+  for (let i = 0; ; i++) {
+    try {
+      const r = await fetch(url);
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return new Uint8Array(await r.arrayBuffer());
+    } catch (e) {
+      if (i >= tries) throw e;
+      await new Promise(r => setTimeout(r, 200 * (i + 1)));
+    }
+  }
+}
+
+// Pick a codec string WebCodecs will accept for this profile. VP9 decoders
+// read the real parameters from the bitstream, so the level/subsampling fields
+// mainly gate the capability check; try a few and use the first supported.
+async function codecFor(profile) {
+  const cands = profile === 0
+    ? ['vp09.00.10.08', 'vp09.00.41.08', 'vp9']
+    : ['vp09.01.10.08', 'vp09.01.41.08.03', 'vp09.01.10.08.03', 'vp9'];
+  for (const c of cands) {
+    try {
+      const s = await VideoDecoder.isConfigSupported({codec: c});
+      if (s.supported) return c;
+    } catch (e) { /* try next */ }
+  }
+  return profile === 0 ? 'vp09.00.10.08' : 'vp09.01.10.08';
+}
+
+async function frameOf(kf, codec) {
+  let out = null, err = null;
+  const dec = new VideoDecoder({output: f => { out = f; }, error: e => { err = e; }});
+  dec.configure({codec});
+  dec.decode(new EncodedVideoChunk({type: 'key', timestamp: 0, data: kf}));
+  await dec.flush();
+  if (!out) throw new Error('libvpx returned no frame' + (err ? ': ' + err : ''));
+  return out;
+}
+
+// Chroma dimensions for a native format (luma is always w x h).
+function chromaDims(fmt, w, h) {
+  const cw = (w + 1) >> 1, ch = (h + 1) >> 1;
+  if (fmt.startsWith('I420') || fmt.startsWith('NV12')) return [cw, ch];
+  if (fmt.startsWith('I444')) return [w, h];
+  if (fmt.startsWith('I422')) return [cw, h];
+  return null;   // packed RGB — not a plane-for-plane match
+}
+
+// Repack a decoded frame's native planes into tight Y,U,V cropped to the
+// display w x h (chroma per the format). copyTo with no format gives the native
+// layout, so no colour conversion happens; the decoder's coded surface may be
+// wider than w (alignment padding), which is why we crop with the real stride
+// rather than trusting codedWidth. NV12 stores UV interleaved in one plane.
+async function tightPlanes(frame, w, h) {
+  const fmt = frame.format;
+  const cd = chromaDims(fmt, w, h);
+  if (!cd) throw new Error('non-planar format ' + fmt);
+  const [cw, ch] = cd;
+  const buf = new Uint8Array(frame.allocationSize());
+  const layout = await frame.copyTo(buf);
+  const out = new Uint8Array(w * h + 2 * cw * ch);
+  // luma
+  let d = 0;
+  {
+    const o = layout[0].offset, s = layout[0].stride;
+    for (let y = 0; y < h; y++)
+      out.set(buf.subarray(o + y * s, o + y * s + w), d + y * w);
+    d += w * h;
+  }
+  if (fmt.startsWith('NV12')) {
+    // one interleaved UV plane -> split into U then V
+    const o = layout[1].offset, s = layout[1].stride;
+    for (let c = 0; c < 2; c++) {
+      for (let y = 0; y < ch; y++)
+        for (let x = 0; x < cw; x++)
+          out[d + y * cw + x] = buf[o + y * s + 2 * x + c];
+      d += cw * ch;
+    }
+  } else {
+    for (let p = 1; p < 3; p++) {
+      const o = layout[p].offset, s = layout[p].stride;
+      for (let y = 0; y < ch; y++)
+        out.set(buf.subarray(o + y * s, o + y * s + cw), d + y * cw);
+      d += cw * ch;
+    }
+  }
+  return out;
+}
+
+async function sha256hex(bytes) {
+  const d = await crypto.subtle.digest('SHA-256', bytes);
+  return [...new Uint8Array(d)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+(async () => {
+  if (!('VideoDecoder' in window)) {
+    SUM.textContent = 'This browser has no WebCodecs — cannot run.';
+    return;
+  }
+  const man = await (await fetch('_vp9cmp/manifest.json')).json();
+  const bin = await grab('_vp9cmp/keyframes.bin');
+  const codecs = {0: await codecFor(0), 1: await codecFor(1)};
+  LOG.textContent = `codec p0=${codecs[0]}  p1=${codecs[1]}\n`;
+
+  let pass = 0, fail = 0;
+  const bad = [];
+  const fmts = {};
+  for (const e of man) {
+    try {
+      const kf = bin.subarray(e.off, e.off + e.len);
+      const frame = await frameOf(kf, codecs[e.profile]);
+      fmts[frame.format] = (fmts[frame.format] || 0) + 1;
+      // The decoder's coded surface may be wider/taller than the display size
+      // (alignment padding); only a smaller surface is a real bug. We crop with
+      // the real per-plane stride, so a larger surface is fine.
+      if (frame.codedWidth < e.w || frame.codedHeight < e.h)
+        throw new Error(`size ${e.w}x${e.h} vs ${frame.codedWidth}x${frame.codedHeight}`);
+      const theirs = await tightPlanes(frame, e.w, e.h);
+      const fmt = frame.format;
+      frame.close();
+      const hex = await sha256hex(theirs);
+      if (hex === e.sha) pass++;
+      else { fail++; bad.push(`DIFF  ${e.name}  ${e.w}x${e.h} p${e.profile} ${fmt} lf=${e.lf}`); }
+    } catch (err) {
+      fail++;
+      bad.push(`ERR   ${e.name}  ${err.message}`);
+    }
+    if ((pass + fail) % 10 === 0 || fail) {
+      SUM.textContent = `${pass + fail} / ${man.length} … ${fail} differing`;
+      LOG.textContent = `formats: ${JSON.stringify(fmts)}\n` + bad.join('\n');
+    }
+  }
+  SUM.className = fail ? 'fail' : 'pass';
+  SUM.textContent = fail
+    ? `FAIL  ${fail} of ${man.length} frames differ from libvpx`
+    : `PASS  ${pass} / ${man.length} keyframes byte-identical to libvpx`;
+  LOG.textContent = `formats: ${JSON.stringify(fmts)}\n` + bad.join('\n');
+})();
+</script>

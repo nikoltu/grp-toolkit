@@ -1,0 +1,31 @@
+{
+  "_meta": {
+    "title": "StarCraft + Brood War single-player cheat codes",
+    "usage": "In a single-player game press Enter, type the code, press Enter again. Codes are case-insensitive. Multiplayer has NO cheats.",
+    "note": "Reference library (wiki-style). Codes + effects are the well-documented public set; sources below.",
+    "sources": [
+      "gamefaqs.gamespot.com/pc/75249-starcraft-brood-war/cheats",
+      "starcraft.fandom.com/wiki/List_of_single_player_cheats",
+      "staredit-network.fandom.com/wiki/List_of_single-player_cheats_in_StarCraft"
+    ]
+  },
+  "cheats": [
+    {"code": "show me the money", "effect": "10 000 minerals + 10 000 vespene gas", "category": "resources"},
+    {"code": "whats mine is mine", "effect": "Free minerals (adds minerals)", "category": "resources"},
+    {"code": "breathe deep", "effect": "Free vespene gas (adds gas)", "category": "resources"},
+    {"code": "power overwhelming", "effect": "God mode — your units/buildings are invincible", "category": "combat"},
+    {"code": "operation cwal", "effect": "Builds/trains/upgrades near-instantly (fast build)", "category": "production"},
+    {"code": "the gathering", "effect": "Unlimited energy — spells cost no mana", "category": "combat"},
+    {"code": "something for nothing", "effect": "Grants all upgrades (attack/armor/etc.)", "category": "tech"},
+    {"code": "medieval man", "effect": "Free upgrades — units/tech upgrade with no cost", "category": "tech"},
+    {"code": "modify the phase variance", "effect": "Lets you build every building (ignores tech-tree requirements)", "category": "tech"},
+    {"code": "food for thought", "effect": "Build units past the supply/psi/control limit", "category": "production"},
+    {"code": "black sheep wall", "effect": "Reveals the entire map (removes unexplored fog)", "category": "vision"},
+    {"code": "war aint what it used to be", "effect": "Disables fog of war (permanent sight of explored areas)", "category": "vision"},
+    {"code": "there is no cow level", "effect": "Instantly completes (wins) the current mission", "category": "mission"},
+    {"code": "game over man", "effect": "Ends the current game as a loss", "category": "mission"},
+    {"code": "staying alive", "effect": "Disables victory/defeat conditions — mission never ends (keep playing)", "category": "mission"},
+    {"code": "ophelia", "effect": "Enables mission select; then type the mission name to jump to it (e.g. 'terran5', 'zerg3', 'protoss7'). Enter 'ophelia' first, then the code.", "category": "mission"},
+    {"code": "radio free zerg", "effect": "Plays a hidden Zerg theme song — only works while playing as Zerg", "category": "fun"}
+  ]
+}

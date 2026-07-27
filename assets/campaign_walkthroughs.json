@@ -1,0 +1,67 @@
+{
+  "_meta": {
+    "description": "Curated FACTS from community walkthroughs (enemy faction, the unit types the enemy attacks with, attack pattern, objective), cross-referenced against each mission's AI-script attack composition. Facts only, attributed by source URL - not walkthrough prose. Missions absent here have script-derived data only; this is a hand-researched subset meant to be extended.",
+    "sources_used": [
+      "strategywiki.org", "starcraft.fandom.com", "guides.gamepressure.com",
+      "gamepressure.com", "portforward.com"
+    ],
+    "cross_reference": "walkthrough enemy_units vs the mission's script attack composition (tools/ai/mission_bot.py). Names normalised (race prefix + plural stripped). confirmed = in both; script_only = the bot attacks with it but the walkthrough didn't note it; walkthrough_only = the walkthrough saw it but no AI attack wave contains it (often trigger-spawned or defensive)."
+  },
+  "missions": {
+    "terran/terran03": {
+      "name": "Desperate Alliance",
+      "objective": "Survive 30 minutes; no offensive objective (pure defence)",
+      "enemy_factions": ["Zerg"],
+      "enemy_units": ["Zergling", "Hydralisk", "Mutalisk"],
+      "attack_pattern": "escalating waves against two choke points until the 30-minute timer",
+      "sources": [
+        "https://guides.gamepressure.com/starcraft_remastered/guide.asp?ID=41009",
+        "https://strategywiki.org/wiki/StarCraft/Terran_mission_3:_Desperate_Alliance"
+      ]
+    },
+    "terran/terran05": {
+      "name": "Revolution",
+      "objective": "Destroy the Confederate Alpha Squadron base on Antiga Prime",
+      "enemy_factions": ["Terran (Confederate Alpha Squadron)"],
+      "enemy_units": ["Marine", "Vulture", "Wraith", "Firebat", "Siege Tank"],
+      "attack_pattern": "ground pushes plus occasional Siege Tanks; bunkers and spider mines on defence",
+      "sources": [
+        "https://www.gamepressure.com/starcraft-remastered/mission-5-revolution/z9a026",
+        "https://strategywiki.org/wiki/StarCraft/Terran_mission_5:_Revolution"
+      ]
+    },
+    "terran/terran07": {
+      "name": "The Trump Card",
+      "objective": "Deliver the Psi Emitter to the beacon (it lures the Zerg onto Delta Squadron)",
+      "enemy_factions": ["Terran (Confederate Delta Squadron)", "Zerg"],
+      "enemy_units": ["Zergling", "Hydralisk", "Mutalisk", "Ultralisk", "Wraith"],
+      "attack_pattern": "Delta Squadron ground forces + cloaked Wraiths early; the Psi Emitter then draws heavy Zerg waves",
+      "sources": [
+        "https://strategywiki.org/wiki/StarCraft/Terran_mission_7:_The_Trump_Card",
+        "https://portforward.com/games/walkthroughs/Starcraft/Terran-7-The-Trump-Card.htm"
+      ]
+    },
+    "zerg/zerg02": {
+      "name": "Egression",
+      "objective": "Escort the Chrysalis to the beacon in the bottom-right corner",
+      "enemy_factions": ["Protoss"],
+      "enemy_units": ["Zealot", "Dragoon", "Scout"],
+      "attack_pattern": "Photon-cannon/Zealot defences on the path; Dragoons and Scouts join as you advance",
+      "sources": [
+        "https://www.gamepressure.com/starcraft-remastered/mission-2-egression/z5a040",
+        "https://strategywiki.org/wiki/StarCraft/Zerg_mission_2:_Egression"
+      ]
+    },
+    "protoss/protoss01": {
+      "name": "First Strike",
+      "objective": "Meet Fenix at Antioch, then wipe out the Zerg base",
+      "enemy_factions": ["Zerg"],
+      "enemy_units": ["Zergling", "Hydralisk", "Mutalisk"],
+      "attack_pattern": "scattered Zergling/Hydralisk groups on the approach; base defended by a sunken colony",
+      "sources": [
+        "https://strategywiki.org/wiki/StarCraft/Protoss_mission_1:_First_Strike",
+        "https://portforward.com/games/walkthroughs/Starcraft/Protoss-1-First-Strike.htm"
+      ]
+    }
+  }
+}

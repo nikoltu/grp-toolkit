@@ -1,0 +1,87 @@
+{
+  "damage_types": {
+    "0": "Independent",
+    "1": "Explosive",
+    "2": "Concussive",
+    "3": "Normal",
+    "4": "IgnoreArmor"
+  },
+  "unit_sizes": {
+    "0": "Independent",
+    "1": "Small",
+    "2": "Medium",
+    "3": "Large"
+  },
+  "size_factor_percent": {
+    "Explosive": {
+      "Small": 50,
+      "Medium": 75,
+      "Large": 100,
+      "Independent": 100
+    },
+    "Concussive": {
+      "Small": 100,
+      "Medium": 50,
+      "Large": 25,
+      "Independent": 100
+    },
+    "Normal": {
+      "Small": 100,
+      "Medium": 100,
+      "Large": 100,
+      "Independent": 100
+    },
+    "IgnoreArmor": {
+      "Small": 100,
+      "Medium": 100,
+      "Large": 100,
+      "Independent": 100
+    },
+    "Independent": {
+      "Small": 100,
+      "Medium": 100,
+      "Large": 100,
+      "Independent": 100
+    }
+  },
+  "shields": {
+    "factor_percent": 100,
+    "ignores_armor": true,
+    "note": "plasma shields always take the full (Normal) factor and are not reduced by unit armor"
+  },
+  "buildings_count_as": "Large",
+  "model": {
+    "order": "per hit: (weapon_damage + bonus*upgrade) - effective_armor (clamp >=0), then * size_factor%, then * hits",
+    "armor": "subtracted PER HIT -> multi-hit weapons (Firebat 3, Zealot/Goliath-air 2) lose more to armor",
+    "ignore_armor_type": "weapon_type 4 (IgnoreArmor) skips the armor step",
+    "independent_type": "weapon_type 0 (Independent) and IgnoreArmor deal 100% to every size",
+    "unverified": "the armor->factor ORDER and BW fixed-point rounding / minimum-damage floor are the documented model, to be confirmed by the engine diff; a fully-absorbed hit reads 0 here (BW has a small fixed-point floor)"
+  },
+  "ability_energy": {
+    "Stim Packs": 0,
+    "Yamato Gun": 150,
+    "Lockdown": 100,
+    "EMP Shockwave": 100,
+    "Defensive Matrix": 100,
+    "Irradiate": 75,
+    "Scanner Sweep": 50,
+    "Cloak (Ghost/Wraith)": 25,
+    "Nuclear Strike": 0,
+    "Psionic Storm": 75,
+    "Hallucination": 100,
+    "Stasis Field": 100,
+    "Recall": 150,
+    "Feedback": 50,
+    "Maelstrom": 100,
+    "Mind Control": 150,
+    "Disruption Web": 125,
+    "Spawn Broodlings": 150,
+    "Dark Swarm": 100,
+    "Plague": 150,
+    "Ensnare": 75,
+    "Parasite": 75,
+    "Consume": 0,
+    "Infestation": 0
+  },
+  "attribution": "damage-type x size mechanic and ability energy from the official StarCraft Compendium (classic.battle.net/scc); all numeric weapon/unit inputs are read from the game's own units.dat / weapons.dat by tools/dat.py"
+}

@@ -1,0 +1,133 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>VP8 video oracle</title>
+<style>
+ body{font:13px/1.5 ui-monospace,Consolas,monospace;margin:1.5rem;max-width:70rem}
+ h1{font-size:1.1rem} .pass{color:#127a2b} .fail{color:#b00}
+ #sum{font-weight:bold;margin:.8rem 0;padding:.5rem;background:#f4f4f4}
+ pre{white-space:pre-wrap}
+</style>
+<h1>VP8 inter-frame decoder vs. libvpx</h1>
+<p>Decodes every frame of every exported clip through this browser's libvpx
+(WebCodecs), plane for plane in I420, and compares each frame to
+<code>tools/vp8_decode.py</code>'s output via SHA-256. This exercises the
+inter path — motion compensation, reference frames, the 6-tap filter — over
+whole sequences, where a drift shows up within a few frames.</p>
+<p>Run <code>py tests/test_vp8_video.py --export</code> first, then serve the
+repo root (<code>py tests/_serve.py</code>) and open this page.</p>
+<div id=sum>working…</div>
+<pre id=log></pre>
+<script>
+const SUM = document.getElementById('sum'), LOG = document.getElementById('log');
+
+async function grab(url, tries = 8) {
+  for (let i = 0; ; i++) {
+    try {
+      const r = await fetch(url);
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return new Uint8Array(await r.arrayBuffer());
+    } catch (e) {
+      if (i >= tries) throw e;
+      await new Promise(r => setTimeout(r, 200 * (i + 1)));
+    }
+  }
+}
+
+async function sha256hex(bytes) {
+  const d = await crypto.subtle.digest('SHA-256', bytes);
+  return [...new Uint8Array(d)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function tightI420(buf, layout, w, h) {
+  const cw = (w + 1) >> 1, ch = (h + 1) >> 1;
+  const out = new Uint8Array(w * h + 2 * cw * ch);
+  const dims = [[w, h], [cw, ch], [cw, ch]];
+  let d = 0;
+  for (let p = 0; p < 3; p++) {
+    const o = layout[p].offset, s = layout[p].stride;
+    for (let y = 0; y < dims[p][1]; y++)
+      out.set(buf.subarray(o + y * s, o + y * s + dims[p][0]), d + y * dims[p][0]);
+    d += dims[p][0] * dims[p][1];
+  }
+  return out;
+}
+
+// Decode one clip's frames sequentially; return an array of I420 hashes,
+// one per frame, in order.
+async function decodeClip(bin, frames) {
+  const hashes = [];
+  let err = null;
+  const pending = [];
+  const dec = new VideoDecoder({
+    output: async (frame) => {
+      const w = frame.codedWidth, h = frame.codedHeight;
+      const buf = new Uint8Array(frame.allocationSize());
+      const layout = await frame.copyTo(buf);
+      // libvpx may round an odd coded dim up by one; the manifest carries the
+      // declared w/h and we crop to it before hashing.
+      const idx = hashes.length;
+      const decl = frames[idx];
+      const tight = tightI420(buf, layout, decl.w, decl.h);
+      hashes.push(await sha256hex(tight));
+      frame.close();
+    },
+    error: e => { err = e; }
+  });
+  dec.configure({codec: 'vp8'});
+  for (let i = 0; i < frames.length; i++) {
+    const f = frames[i];
+    dec.decode(new EncodedVideoChunk({
+      type: i === 0 ? 'key' : 'delta',
+      timestamp: i * 1000,
+      data: bin.subarray(f.off, f.off + f.len)
+    }));
+  }
+  await dec.flush();
+  if (err) throw new Error(String(err));
+  return hashes;
+}
+
+(async () => {
+  if (!('VideoDecoder' in window)) {
+    SUM.textContent = 'This browser has no WebCodecs — cannot run.';
+    return;
+  }
+  const man = await (await fetch('_vp8vid/manifest.json')).json();
+  const bin = await grab('_vp8vid/frames.bin');
+
+  let passF = 0, failF = 0, passC = 0, failC = 0;
+  const bad = [];
+  for (const clip of man) {
+    let clipOk = true;
+    try {
+      const hashes = await decodeClip(bin, clip.frames);
+      if (hashes.length !== clip.frames.length) {
+        clipOk = false;
+        bad.push(`ERR   ${clip.name}  got ${hashes.length}/${clip.frames.length} frames`);
+      } else {
+        for (let i = 0; i < hashes.length; i++) {
+          if (hashes[i] === clip.frames[i].sha) passF++;
+          else {
+            failF++; clipOk = false;
+            if (bad.length < 60)
+              bad.push(`DIFF  ${clip.name}  frame ${i}/${clip.frames.length}`);
+          }
+        }
+      }
+    } catch (e) {
+      clipOk = false;
+      bad.push(`ERR   ${clip.name}  ${e.message}`);
+    }
+    if (clipOk) passC++; else failC++;
+    if ((passC + failC) % 5 === 0 || !clipOk) {
+      SUM.textContent = `clips ${passC + failC}/${man.length} · frames ok ${passF} · ${failC} clips differ`;
+      LOG.textContent = bad.join('\n');
+    }
+  }
+  SUM.className = failC ? 'fail' : 'pass';
+  SUM.textContent = failC
+    ? `FAIL  ${failC}/${man.length} clips differ (${failF} frames); ${passF} frames matched`
+    : `PASS  ${man.length}/${man.length} clips, ${passF} frames byte-identical to libvpx`;
+  LOG.textContent = bad.join('\n');
+})();
+</script>

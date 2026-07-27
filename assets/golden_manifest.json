@@ -1,0 +1,9 @@
+{
+  "anim_layer:anim/main_239.anim:diffuse": "cbc7a51c8e3411d5a53a836098b85f1545b3154c2c4d47a90ee8c6889c70ef10",
+  "anim_layer:anim/main_239.anim:teamcolor": "0c5a42c44cdbe3cd4afedfe6ef04953378e112fba01e2355e9ce0ad36331f926",
+  "composite:anim/main_239.anim:f0:p1": "a5bf0c0e769ad61ae293eac66d35f3852b43c9e5cb42958498fa0ef2a6807292",
+  "grp:unit\\protoss\\zealot.grp": "6a4a72859a18195008bb9bf69129beb30882ca2191fcb537c5dce1b8d7e689a1",
+  "grp:unit\\terran\\marine.grp": "0b78d4423d9d3abd282a1450b78164c7cb2835fe11fd716e47bba973297c3d53",
+  "grp:unit\\zerg\\zergling.grp": "ec47d37a0a84cb9605a07144b6cff2fcca95285db76c515e355f54fac0c52149",
+  "tbl:rez\\stat_txt.tbl": "781b4bd67586f8432024cbc93d836520eddcc936a841ca76566932d554798c5d"
+}

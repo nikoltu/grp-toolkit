@@ -1,0 +1,652 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SC ASSET BROWSER — .mpq / folder browser + viewer</title>
+<style>%%CSS%%</style>
+</head>
+<body>
+<div class="app">
+  <header class="bar">
+    <div class="logo"><b>SC&nbsp;ASSET&nbsp;BROWSER</b><span>GRP · DDS · ANIM · PCX · SMK · MPQ</span></div>
+    <div class="grow"></div>
+    <label class="file primary">Open folder
+      <input id="dirInput" type="file" webkitdirectory directory multiple hidden></label>
+    <label class="file">CASC folder
+      <input id="cascInput" type="file" webkitdirectory directory multiple hidden></label>
+    <label class="file">Open files
+      <input id="fileInput" type="file" accept=".grp,.dds,.anim,.pcx,.smk,.mpq,.txt,.lst,.bin" multiple hidden></label>
+    <button id="cmdkBtn" title="Quick tool search (Ctrl/⌘ + K)">⌘K</button>
+    <button id="themeBtn" title="Light / dark theme">🌙</button>
+    <div class="toolsmenu">
+      <button id="toolsToggle" class="primary">🛠 Tools ▾</button>
+      <div class="toolsdd" id="toolsDD">
+        <div class="tihint">Quick search: <b>Ctrl/⌘ + K</b></div>
+        <div class="ti" data-open="wfOpen"><span class="tii">🎯</span>Wireframe tester</div>
+        <div class="ti" data-open="campOpen"><span class="tii">🗺️</span>Campaign missions</div>
+        <div class="ti" data-open="caiOpen"><span class="tii">🧠</span>Campaign analyzer</div>
+        <div class="ti" data-open="cwtOpen"><span class="tii">📖</span>Campaign walkthrough</div>
+        <div class="ti" data-open="repOpen"><span class="tii">🎥</span>Replay viewer</div>
+        <div class="tisep"></div>
+        <div class="ti" data-open="cheatOpen"><span class="tii">🧾</span>Reference: cheats</div>
+        <div class="ti" data-open="hudOpen"><span class="tii">🖥️</span>HUD editor</div>
+        <div class="tisep"></div>
+        <div class="ti" data-open="botOpen"><span class="tii">🤖</span>Bot builder</div>
+        <div class="ti" data-open="datOpen"><span class="tii">📊</span>DAT editor</div>
+        <div class="ti" data-open="tblOpen"><span class="tii">📝</span>TBL editor</div>
+        <div class="ti" data-open="sprOpen"><span class="tii">🎨</span>Sprite importer</div>
+        <div class="ti" data-open="iscOpen"><span class="tii">🎞️</span>iscript editor</div>
+        <div class="tisep"></div>
+        <div class="ti" data-open="modOpen"><span class="tii">📦</span>Mod Builder</div>
+      </div>
+    </div>
+    <!-- real tool buttons kept (hidden): dashboard cards + menu items trigger these; handlers unchanged -->
+    <div id="toolBtns" style="display:none">
+      <button id="wfOpen">Wireframe tester</button>
+      <button id="campOpen">Campaign missions</button>
+      <button id="caiOpen">Campaign AI</button>
+      <button id="repOpen">Replay viewer</button>
+      <button id="cwtOpen">Campaign walkthrough</button>
+      <button id="cheatOpen">Reference cheats</button>
+      <button id="hudOpen">HUD editor</button>
+      <button id="botOpen">Bot builder</button>
+      <button id="datOpen">DAT editor</button>
+      <button id="tblOpen">TBL editor</button>
+      <button id="sprOpen">Sprite import</button>
+      <button id="iscOpen">iscript</button>
+      <button id="modOpen">Mod Builder</button>
+    </div>
+  </header>
+
+  <!-- command palette: fast fuzzy tool launcher, reachable from any view (Ctrl/⌘+K) -->
+  <div id="cmdk" class="cmdk">
+    <div class="cmdk-box">
+      <input id="cmdkInput" type="text" spellcheck="false" autocomplete="off"
+        placeholder="Tools — type a name…   (↑↓ navigate · Enter open · Esc close)">
+      <div id="cmdkList" class="cmdk-list"></div>
+    </div>
+  </div>
+
+  <div id="tbl">
+    <div class="wfbar">
+      <b>TBL EDITOR</b>
+      <select id="tblKind">
+        <option value="rez\stat_txt.tbl">stat_txt.tbl (unit/button text)</option>
+        <option value="arr\images.tbl">images.tbl (GRP file names)</option>
+        <option value="arr\sfxdata.tbl">sfxdata.tbl (sound files)</option>
+        <option value="rez\gluall.tbl">gluall.tbl (UI text)</option>
+      </select>
+      <input id="tblSearch" type="text" placeholder="search (text / #)" style="width:220px">
+      <span id="tblStat" style="color:var(--ink-dim);font-size:11px"></span>
+      <span style="flex:1"></span>
+      <button id="tblToMod">→ to Mod Builder</button>
+      <button id="tblDl">⬇ .tbl</button>
+      <button id="tblClose">Close</button>
+    </div>
+    <div class="modbody">
+      <div class="modcol">
+        <div style="font-family:var(--sans);font-weight:700;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-dim);margin-bottom:6px">Entries (<span id="tblCount">0</span>)</div>
+        <div class="elist" id="tblList"></div>
+      </div>
+      <div class="modcol">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+          <div id="tblTitle" style="font-family:var(--sans);font-weight:700;font-size:13px;color:var(--teal);flex:1">—</div>
+          <button id="tblRevert" title="revert this entry's change">↺ entry</button>
+        </div>
+        <div id="tblEdit" style="color:var(--ink-dim);font-size:12px">Select an entry on the left.</div>
+      </div>
+    </div>
+  </div>
+
+  <main>
+    <aside>
+      <div class="tree-head">
+        <input id="filter" type="text" placeholder="filter — path or hero name (raynor, fenix, kerrigan…)" spellcheck="false">
+        <button id="expandAll" title="Expand/collapse">⇕</button>
+      </div>
+      <div id="cascExtract" style="display:none;padding:10px 12px;border-bottom:1px solid #0c1a2a;background:#0a1a12">
+        <div style="font-family:var(--sans);font-weight:700;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:#8fe0a0;margin-bottom:8px">CASC blob extraction</div>
+        <div class="cline"><input id="ekeyIn" type="text" spellcheck="false" placeholder="EKey (hex)" style="flex:1;background:#0a1626;border:1px solid var(--edge);border-radius:5px;color:var(--ink);font-family:var(--mono);font-size:11px;padding:5px 8px"></div>
+        <div class="cline"><button id="ekeyExtract" style="flex:1">Extract + download</button></div>
+        <div id="ekeyStatus" style="color:var(--ink-dim);font-size:10px;min-height:12px"></div>
+      </div>
+      <div class="tree" id="tree">
+        <div style="padding:14px;color:var(--ink-dim);font-size:12px;line-height:1.7">
+          Open a folder (e.g. an unpacked SC:R/BW <b style="color:var(--ink)">assets</b> directory) or individual files.
+          The app will find and arrange the files into a tree by itself.
+        </div>
+      </div>
+      <div class="side-ctl" id="ctlPanel" style="display:none">
+        <div id="palCtl" style="display:none">
+          <h3>Palette (GRP)</h3>
+          <div class="cline"><label>Mode</label>
+            <select id="palMode">
+              <option value="auto">Auto (adaptive)</option>
+              <option value="gray">Grayscale</option>
+              <option value="green">Wireframe green</option>
+              <option value="custom">Loaded palette…</option>
+            </select></div>
+          <div class="cline"><label class="file" style="min-width:60px;text-align:center">Palette file
+            <input id="palInput" type="file" accept=".pal,.wpe,.act,.pcx" hidden></label>
+            <span id="palName" style="flex:1;color:var(--ink-dim);font-size:11px">none</span></div>
+          <div class="cline"><select id="palFromMpq" style="flex:1">
+              <option value="">Authentic palette from open MPQ…</option>
+              <option value="unit\cmdbtns\ticon.pcx">ticon.pcx (command icons)</option>
+              <option value="game\twire.pcx">twire.pcx (wireframe bands)</option>
+              <option value="game\tunit.pcx">tunit.pcx (player colors)</option>
+              <option value="tileset\badlands.wpe">badlands.wpe</option>
+              <option value="tileset\platform.wpe">platform.wpe</option>
+              <option value="tileset\jungle.wpe">jungle.wpe</option>
+              <option value="tileset\ashworld.wpe">ashworld.wpe</option>
+              <option value="tileset\desert.wpe">desert.wpe</option>
+              <option value="tileset\ice.wpe">ice.wpe</option>
+              <option value="tileset\twilight.wpe">twilight.wpe</option>
+              <option value="tileset\install.wpe">install.wpe</option>
+            </select></div>
+        </div>
+        <div id="layerCtl" style="display:none">
+          <h3>Layer (ANIM)</h3>
+          <div class="cline"><label>Show</label><select id="animLayer"></select></div>
+        </div>
+        <h3>Preview</h3>
+        <div class="cline"><label>Background</label>
+          <div class="swatches" id="bgSw">
+            <div class="sw on" data-bg="checker" title="Checkerboard"></div>
+            <div class="sw" data-bg="#000000" style="background:#000"></div>
+            <div class="sw" data-bg="#ffffff" style="background:#fff"></div>
+            <div class="sw" data-bg="#ff00ff" style="background:#f0f" title="Chroma"></div>
+          </div></div>
+        <div class="cline"><label>Scale</label>
+          <input id="zoom" type="range" min="1" max="8" step="1" value="2">
+          <span id="zoomVal" style="min-width:24px;text-align:right;color:var(--ink-dim)">2×</span></div>
+      </div>
+    </aside>
+
+    <section class="view">
+      <div class="tabs">
+        <div class="tab on" data-tab="grid">Grid</div>
+        <div class="tab" data-tab="detail">Frame</div>
+        <div class="tab" data-tab="anim">Animation</div>
+      </div>
+      <div class="stage" id="stage">
+        <div class="empty" id="emptyState" style="overflow:auto">
+          <div class="mk" style="max-width:1000px;margin:0 auto">// SC ASSET TOOLKIT — pick a tool or open data</div>
+
+          <div class="dsec">1 · Data source</div>
+          <div class="dash">
+            <div class="dcard act" data-open="dirInput"><div class="dh"><span class="di">📁</span><span class="dt">Open folder / MPQ</span></div>
+              <div class="dd">Unpacked assets directory or <b>.mpq</b> archive. Built-in listfile (10,626 names). Required for the wireframe/Campaign AI tools.</div><div class="dgo">Open →</div></div>
+            <div class="dcard act" data-open="cascInput"><div class="dh"><span class="di">💿</span><span class="dt">CASC (SC:R)</span></div>
+              <div class="dd">SC:R <b>Data</b> or install root — names from build config/encoding/root, all HD graphics (GRP/DDS/ANIM/PCX).</div><div class="dgo">Open →</div></div>
+            <div class="dcard act" data-open="fileInput"><div class="dh"><span class="di">📄</span><span class="dt">Open individual files</span></div>
+              <div class="dd">One or more files (.grp/.dds/.anim/.pcx/.smk/.webm/.wav/.bin/.scm/.chk).</div><div class="dgo">Open →</div></div>
+          </div>
+
+          <div class="dsec">2 · Tools</div>
+          <div class="dash">
+            <div class="dcard act" data-open="wfOpen"><div class="dh"><span class="di">🎯</span><span class="dt">Wireframe tester</span></div>
+              <div class="dd">Unit wireframe color model (HP/shield, per-part gradient), SD indices + HD masks, heatmap. Export → wireframe-colors.json.</div>
+              <div class="dhint">requires an open MPQ / CASC</div></div>
+            <div class="dcard act" data-open="caiOpen"><div class="dh"><span class="di">🧠</span><span class="dt">Campaign analyzer</span></div>
+              <div class="dd"><b>All campaign missions auto-listed</b> (no manual hierarchy): 🎙 briefing timeline (who speaks/portrait/wav/duration), 🎯 unit actions from triggers (Move/Patrol/Attack), AI scripts + scaler.</div>
+              <div class="dhint">requires an open MPQ (BW)</div></div>
+            <div class="dcard act" data-open="hudOpen"><div class="dh"><span class="di">🖥️</span><span class="dt">HUD editor</span></div>
+              <div class="dd">HUD v2 panel layout (drag+resize, lock, undo/redo) → <b>hud2_* C++ formulas</b> + JSON.</div>
+              <div class="dbadge">works without data</div></div>
+            <div class="dcard act" data-open="botOpen"><div class="dh"><span class="di">🤖</span><span class="dt">Bot builder</span></div>
+              <div class="dd">Tactics table (build order + adaptation branches) → <b>byte-exact aiscript.bin</b>. Templates: rush / defense / adaptive. Merge into stock or standalone.</div>
+              <div class="dbadge">works without data</div></div>
+            <div class="dcard act" data-open="datOpen"><div class="dh"><span class="di">📊</span><span class="dt">DAT editor</span></div>
+              <div class="dd"><b>units.dat</b> / <b>weapons.dat</b>: HP (1/256), shield, armor, cost, build-time, damage. Field layout confirmed by 4 anchors. → <code>data/arr/…</code> override.</div>
+              <div class="dhint">requires an open MPQ / CASC</div></div>
+            <div class="dcard act" data-open="sprOpen"><div class="dh"><span class="di">🎨</span><span class="dt">Sprite importer</span></div>
+              <div class="dd">PNG frames → palette quantization → classic <b>GRP</b> (pixel round-trip oracle) → <code>data/unit/…</code> override. SD unit reskin without C++.</div>
+              <div class="dbadge">works without data</div></div>
+            <div class="dcard act" data-open="iscOpen"><div class="dh"><span class="di">🎞️</span><span class="dt">iscript viewer</span></div>
+              <div class="dd">Animation bytecode disasm (<b>iscript.bin</b>): playfram/wait/goto/imgol/playsnd. 398 scripts, 9763 opcodes, 0 desync (coverage oracle).</div>
+              <div class="dhint">requires an open MPQ / CASC</div></div>
+            <div class="dcard act" data-open="modOpen"><div class="dh"><span class="di">📦</span><span class="dt">Mod Builder</span></div>
+              <div class="dd">Packs editor outputs into a launcher <b>.zip</b> mod (scaled aiscript.bin + file overrides). JS AI assembler + zip.</div>
+              <div class="dbadge">works without data</div></div>
+          </div>
+
+          <div class="dsec">3 · Preview (open a file in the tree on the left)</div>
+          <div class="dash">
+            <div class="dcard"><div class="dh"><span class="di">🖼️</span><span class="dt">Graphics</span></div>
+              <div class="dd"><b>.grp</b> (RLE+flat), <b>.dds.grp</b>, <b>.anim</b>, <b>.pcx</b> — rendered; export a classic GRP as .grpi.</div></div>
+            <div class="dcard"><div class="dh"><span class="di">🎬</span><span class="dt">Video + audio</span></div>
+              <div class="dd"><b>.smk</b> own decoder (519/519), <b>.webm</b> natively + frame export, <b>.wav/.ogg</b> with waveform (Huffman+ADPCM from MPQ).</div></div>
+            <div class="dcard"><div class="dh"><span class="di">🤖</span><span class="dt">AI scripts</span></div>
+              <div class="dd">Open <b>aiscript.bin</b>/<b>bwscript.bin</b> → disasm + semantics + scaler. 293 scripts, 0 unknown opcodes.</div></div>
+            <div class="dcard act" data-open="repOpen"><div class="dh"><span class="di">🎥</span><span class="dt">Replay viewer</span></div>
+              <div class="dd">Open <b>.rep</b> (classic or SC:R) → build order, APM/EAPM, tech/upgrade, who left + <b>full command log</b> (who built/did/attacked). Python <code>tools/rep/</code> twin.</div>
+              <div class="dbadge">works without data</div></div>
+            <div class="dcard act" data-open="campOpen"><div class="dh"><span class="di">🗺️</span><span class="dt">Campaign missions</span></div>
+              <div class="dd">Automatically <b>filters out all campaign missions</b> from the open MPQ — no need to walk the tree. For each: 🤖 bot behavior from AI scripts (build/attack) + 📖 walkthrough cross-reference + briefing + heroes.</div>
+              <div class="dbadge">requires BW .mpq</div></div>
+          </div>
+          <div style="max-width:1000px;margin:16px auto 0;color:var(--ink-dim);font-size:10px">All decoders have byte-for-byte oracles — see <code>tests/</code>.</div>
+        </div>
+        <div class="grid" id="gridView" style="display:none"></div>
+        <div class="single" id="detailView" style="display:none">
+          <div class="canvaswrap"><canvas id="detCanvas"></canvas></div>
+          <div class="readout">
+            <div><span class="tag" id="detFmt">—</span></div>
+            <h4>Telemetry</h4><div class="tele" id="detTele"></div>
+            <h4>Export</h4>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <button id="expFrame">Save PNG (frame)</button>
+              <button id="expSheet">Export sprite sheet</button>
+              <button id="expGrpi" title="Raw palette indices for comparison with another implementation">Export .grpi (indices)</button>
+            </div>
+          </div>
+        </div>
+        <div class="single" id="animView" style="display:none">
+          <div class="canvaswrap"><canvas id="animCanvas"></canvas></div>
+          <div class="readout">
+            <div><span class="tag" id="animFmt">—</span></div>
+            <h4>Player</h4>
+            <div class="cline"><span class="big" id="animIx">0</span><span style="color:var(--ink-dim)">/&nbsp;<span id="animTot">0</span></span></div>
+            <button id="playBtn" class="primary">▶ Play</button>
+            <div class="cline"><label>FPS</label><input id="fps" type="range" min="1" max="30" value="12"><span id="fpsVal" style="min-width:30px;text-align:right;color:var(--ink-dim)">12</span></div>
+            <div class="cline"><label>Frame</label><input id="scrub" type="range" min="0" max="0" value="0"></div>
+            <label class="cline" style="cursor:pointer"><input type="checkbox" id="alignChk" checked> <span style="color:var(--ink-dim);font-size:11px">Use X/Y offset</span></label>
+          </div>
+        </div>
+        <div class="single" id="videoView" style="display:none">
+          <div class="canvaswrap"><video id="vidEl" autoplay loop muted playsinline
+            style="image-rendering:pixelated;background:#0b1220;box-shadow:0 0 0 1px var(--edge),0 24px 60px rgba(0,0,0,.5)"></video></div>
+          <div class="readout">
+            <div><span class="tag" id="vidFmt">—</span></div>
+            <h4>Telemetry</h4><div class="tele" id="vidTele"></div>
+            <h4>Scale</h4>
+            <div class="cline"><input id="vidZoom" type="range" min="1" max="8" step="1" value="2">
+              <span id="vidZoomV" style="min-width:24px;text-align:right;color:var(--ink-dim)">2×</span></div>
+            <h4>Export</h4>
+            <button id="vidExport">Export frames (PNG strip)</button>
+            <div id="vidExportMsg" style="color:var(--ink-dim);font-size:10px;min-height:12px"></div>
+            <div style="color:var(--ink-dim);font-size:10px;line-height:1.6">
+              VP8/VP9 is decoded by the browser itself; frames are pulled via canvas, so
+              you get real pixels without writing a codec.</div>
+          </div>
+        </div>
+        <div class="single" id="audioView" style="display:none">
+          <div class="canvaswrap" style="flex-direction:column;gap:18px">
+            <canvas id="wavCanvas" style="border-radius:6px;box-shadow:0 0 0 1px var(--edge)"></canvas>
+            <audio id="audEl" controls style="width:420px"></audio>
+          </div>
+          <div class="readout">
+            <div><span class="tag" id="audFmt">—</span></div>
+            <h4>Telemetry</h4><div class="tele" id="audTele"></div>
+            <div style="color:var(--ink-dim);font-size:10px;line-height:1.6">
+              SC:R stores audio as raw PCM/Ogg. Measured: <b>sd/sound/</b> holds
+              the same bytes the 1998 MPQ stores compressed
+              (1123/1127 sizes match exactly), so no ADPCM+Huffman
+              decoder is needed to hear the original.</div>
+          </div>
+        </div>
+        <div class="msg" id="infoMsg" style="display:none"></div>
+        <div class="msg" id="loadMsg" style="display:none"><div class="spin"></div><div id="loadText">Loading…</div></div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="status">
+    <span class="dot" id="statDot"></span>
+    <span id="statText">Ready.</span>
+    <div class="grow"></div>
+    <span id="statMeta"></span>
+  </footer>
+</div>
+<div id="drop"><div class="box">// DROP FILES / FOLDER</div></div>
+
+<div id="wf">
+  <div class="wfbar">
+    <b>WIREFRAME&nbsp;TESTER</b>
+    <span id="wfSrc" style="color:var(--ink-dim);font-size:11px"></span>
+    <div class="grow"></div>
+    <label style="color:var(--ink-dim);font-size:11px"><input type="checkbox" id="wfHeat"> heatmap (mask coverage)</label>
+    <label style="color:var(--ink-dim);font-size:11px"><input type="checkbox" id="wfArt"> original HD art</label>
+    <label style="color:var(--ink-dim);font-size:11px"><input type="checkbox" id="wfRim" checked> shield rim</label>
+    <button id="wfClose">Close</button>
+  </div>
+  <div class="wfbody">
+    <div class="wfcol">
+      <input id="wfFilter" type="text" placeholder="filter units…" spellcheck="false"
+        style="width:100%;background:#0a1626;border:1px solid var(--edge);border-radius:5px;color:var(--ink);font-family:var(--mono);font-size:11px;padding:5px 8px;margin-bottom:8px">
+      <div id="wfUnits" class="ulist"></div>
+    </div>
+    <div class="wfcol">
+      <div class="stage2">
+        <div class="pv"><h5>SD — wirefram.grp (indices)</h5><canvas id="wfSd"></canvas></div>
+        <div class="pv"><h5>HD — wirefram.dds.grp (masks)</h5><canvas id="wfHd"></canvas></div>
+        <div class="pv" style="flex:1;min-width:240px"><h5>Mask cells</h5><canvas id="wfCells"></canvas>
+          <div id="wfCellInfo" style="color:var(--ink-dim);font-size:10px;margin-top:6px;line-height:1.6"></div></div>
+      </div>
+    </div>
+    <div class="wfcol">
+      <div class="rhead">Authentic strip — game\twire.pcx</div>
+      <div id="wfTwire" class="strip"></div>
+      <div style="color:var(--ink-dim);font-size:10px;margin-bottom:10px">
+        Click a color, then click a ramp cell below — the value comes from the file, not by eye.
+      </div>
+      <div class="rhead">Status</div>
+      <div class="slot"><span class="lbl">Model</span>
+        <select id="wfMode" style="flex:1">
+          <option value="auto">Auto — per part (authentic)</option>
+          <option value="parts">Per part (3 stages green/yellow/red)</option>
+          <option value="window">Sliding window (gradient)</option>
+          <option value="solid">Solid color (wrong — for comparison)</option>
+        </select></div>
+      <div id="wfModeNote" style="color:var(--ink-dim);font-size:10px;margin:-2px 0 8px 0;line-height:1.5"></div>
+      <div class="slot"><span class="lbl">HP</span><input id="wfHp" type="range" min="0" max="100" value="100" style="flex:1"><span class="hex" id="wfHpV">100%</span></div>
+      <div class="slot"><span class="lbl">Shield</span><input id="wfSp" type="range" min="0" max="100" value="100" style="flex:1"><span class="hex" id="wfSpV">100%</span></div>
+      <div class="rhead">Zerg ramp (9) — <span style="color:var(--teal)">active cells marked</span></div>
+      <div id="wfZerg"></div>
+      <div class="rhead">Terran / Protoss ramp (9)</div>
+      <div id="wfTp"></div>
+      <div class="rhead">Shield ramp (7) — shield_lo = ramp[hi/2]</div>
+      <div id="wfShield"></div>
+      <div class="rhead">Structure (SD 192/193) + hd_line</div>
+      <div id="wfMisc"></div>
+      <div class="rhead">HD masks — each separately</div>
+      <div id="wfMask"></div>
+      <div class="rhead">Export</div>
+      <button id="wfResetBtn" style="width:100%;margin-bottom:8px">Reset to authentic (twire.pcx)</button>
+      <button id="wfExport" style="width:100%;margin-bottom:8px">Download wireframe-colors.json</button>
+      <textarea id="wfJson" spellcheck="false" readonly></textarea>
+    </div>
+  </div>
+</div>
+
+<div id="cai">
+  <div class="wfbar">
+    <b>CAMPAIGN AI ORACLE</b>
+    <span id="caiSrc" style="color:var(--ink-dim);font-size:11px"></span>
+    <span style="flex:1"></span>
+    <button id="caiClose">Close</button>
+  </div>
+  <div class="caibody">
+    <div class="caicol">
+      <input id="caiFilter" type="text" placeholder="filter missions / scripts…" spellcheck="false"
+        style="width:100%;background:#0a1626;border:1px solid var(--edge);border-radius:5px;color:var(--ink);font-size:12px;padding:5px 8px;margin-bottom:6px">
+      <div id="caiList"></div>
+    </div>
+    <div class="caicol" id="caiDetail" style="font-size:12px"></div>
+  </div>
+</div>
+
+<div id="rep">
+  <div class="wfbar">
+    <b>REPLAY (.rep) VIEWER</b>
+    <span id="repSrc" style="color:var(--ink-dim);font-size:11px"></span>
+    <span style="flex:1"></span>
+    <label class="file" style="margin-right:8px">Open .rep
+      <input id="repInput" type="file" accept=".rep" hidden></label>
+    <button id="repLogBtn" title="Toggle full command log">Command log</button>
+    <button id="repTransBtn" title="Convert SC:R replay to classic 1.16.1 format" style="display:none">⬇ → 1.16.1</button>
+    <button id="repClose">Close</button>
+  </div>
+  <div class="repbody">
+    <div class="repcol" id="repList"></div>
+    <div class="repcol" id="repDetail" style="font-size:12px"></div>
+  </div>
+</div>
+
+<div id="cheat">
+  <div class="wfbar"><b>REFERENCE — CHEATS</b>
+    <span id="cheatSrc" style="color:var(--ink-dim);font-size:11px"></span>
+    <span style="flex:1"></span>
+    <input id="cheatFilter" type="text" placeholder="filter…" spellcheck="false"
+      style="background:#0a1626;border:1px solid var(--edge);border-radius:5px;color:var(--ink);font-size:12px;padding:5px 8px;margin-right:8px">
+    <button id="cheatClose">Close</button>
+  </div>
+  <div class="cbody" id="cheatBody"></div>
+</div>
+
+<div id="cwt">
+  <div class="wfbar"><b>CAMPAIGN WALKTHROUGH</b>
+    <span id="cwtSrc" style="color:var(--ink-dim);font-size:11px"></span>
+    <span style="flex:1"></span>
+    <input id="cwtFilter" type="text" placeholder="filter missions…" spellcheck="false"
+      style="background:#0a1626;border:1px solid var(--edge);border-radius:5px;color:var(--ink);font-size:12px;padding:5px 8px;margin-right:8px">
+    <button id="cwtCsv" title="Export table as CSV (spreadsheet)">⬇ CSV</button>
+    <button id="cwtClose">Close</button>
+  </div>
+  <div class="cbody" id="cwtBody"></div>
+</div>
+
+<div id="hud">
+  <div class="wfbar">
+    <b>HUD v2 LAYOUT EDITOR</b>
+    <span id="hudSrc" style="color:var(--ink-dim);font-size:11px">drag panels — output: hud2_* formulas</span>
+    <span style="flex:1"></span>
+    <label style="color:var(--ink-dim);font-size:11px">screen
+      <select id="hudPreset" style="background:var(--panel);color:var(--ink);border:1px solid var(--edge)">
+        <option value="2560x1600">2560×1600 (Tab S7+)</option>
+        <option value="1920x1080">1920×1080</option>
+        <option value="1280x800">1280×800</option>
+      </select></label>
+    <button id="hudUndo" title="Undo (Ctrl+Z)">↶ Undo</button>
+    <button id="hudRedo" title="Redo (Ctrl+Y)">↷ Redo</button>
+    <label style="color:var(--ink-dim);font-size:11px"><input type="checkbox" id="hudLock"> lock</label>
+    <button id="hudReset">Reset</button>
+    <button id="hudClose">Close</button>
+  </div>
+  <div class="hudbody">
+    <canvas id="hudCanvas"></canvas>
+    <div class="hudside">
+      <div style="font-family:var(--sans);font-weight:700;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-dim);margin-bottom:6px">Panel</div>
+      <div id="hudSel" style="font-size:12px;color:var(--ink);margin-bottom:8px">none selected</div>
+      <div id="hudProps" style="font-size:11px;color:var(--ink-dim);line-height:1.7"></div>
+      <div style="font-family:var(--sans);font-weight:700;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-dim);margin:12px 0 6px">Fonts (Unit Display, px @base)</div>
+      <div style="display:flex;gap:8px;font-size:11px;color:var(--ink-dim)">
+        <label>Name <input id="hudFontName" type="number" min="8" max="80" value="30" style="width:44px;background:#0a1626;border:1px solid var(--edge);color:var(--ink)"></label>
+        <label style="color:#e8c828">Detector <input id="hudFontDetector" type="number" min="8" max="60" value="20" style="width:44px;background:#0a1626;border:1px solid var(--edge);color:var(--ink)"></label>
+        <label>Rank <input id="hudFontRank" type="number" min="8" max="60" value="22" style="width:44px;background:#0a1626;border:1px solid var(--edge);color:var(--ink)"></label>
+        <label>Kills <input id="hudFontKills" type="number" min="8" max="60" value="22" style="width:44px;background:#0a1626;border:1px solid var(--edge);color:var(--ink)"></label>
+      </div>
+      <div style="font-family:var(--sans);font-weight:700;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-dim);margin:12px 0 6px">Output (hud2_* C++ + JSON)</div>
+      <textarea id="hudJson" spellcheck="false" readonly></textarea>
+      <button id="hudExport" style="width:100%;margin-top:8px">Download hud2-layout.json</button>
+    </div>
+  </div>
+</div>
+
+<div id="mod">
+  <div class="wfbar">
+    <b>MOD BUILDER</b>
+    <span id="modSrc" style="color:var(--ink-dim);font-size:11px">packs editor outputs into a .zip (files/mods/&lt;id&gt;/)</span>
+    <span style="flex:1"></span>
+    <button id="modClose">Close</button>
+  </div>
+  <div class="modbody">
+    <div class="modcol">
+      <div style="font-family:var(--sans);font-weight:700;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-dim)">Manifest (mod.json)</div>
+      <label class="f">Zip / folder name (= mod ID; no spaces)</label><input id="modId" type="text" value="my-mod" spellcheck="false">
+      <div style="color:var(--ink-dim);font-size:10px;margin-top:2px">The engine takes the ID from the <b>file name</b>, not from mod.json.</div>
+      <label class="f">Name</label><input id="modName" type="text" value="My Mod" spellcheck="false">
+      <div style="display:flex;gap:8px"><div style="flex:1"><label class="f">Version</label><input id="modVer" type="text" value="1.0" spellcheck="false"></div>
+        <div style="flex:1"><label class="f">Author</label><input id="modAuthor" type="text" spellcheck="false"></div></div>
+      <label class="f">Description</label><textarea id="modDesc" rows="2" spellcheck="false"></textarea>
+      <label class="f">Type (label; behavior — from data/ subdir)</label>
+      <select id="modType" style="width:100%;background:#0a1626;border:1px solid var(--edge);color:var(--ink);padding:5px">
+        <option value="data">data</option><option value="hybrid">hybrid</option><option value="bot">bot</option></select>
+      <label class="f" style="margin-top:6px"><input type="checkbox" id="modUseMpq"> pack into data.mpq (instead of loose)</label>
+      <div style="font-family:var(--sans);font-weight:700;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-dim);margin:14px 0 6px">Add files</div>
+      <button class="src" id="modAddWf">+ Wireframe colors (from tester)</button>
+      <div style="display:flex;gap:6px;align-items:center;margin:4px 0">
+        <label class="file" style="flex:1;text-align:center">+ AI scaler (aiscript.bin)
+          <input id="modAiFile" type="file" accept=".bin" hidden></label>
+        <select id="modAiProfile" style="background:#0a1626;border:1px solid var(--edge);color:var(--ink)">
+          <option value="hard">hard</option><option value="brutal">brutal</option></select></div>
+      <label class="file src" style="text-align:center;display:block">+ Override file (upload)
+        <input id="modFile" type="file" hidden></label>
+      <div style="color:var(--ink-dim);font-size:10px;line-height:1.5;margin-top:2px">For an override — after upload it asks for the game path (e.g. <code>unit\\wirefram\\wirefram.grp</code>).</div>
+    </div>
+    <div class="modcol">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <div style="font-family:var(--sans);font-weight:700;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-dim);flex:1">Files (<span id="modCount">0</span>)</div>
+        <button id="modPack" style="background:#173a2a;border-color:#2a6a4a">⬇ Pack .zip</button>
+      </div>
+      <div id="modWarn" style="color:#e0708a;font-size:11px;margin-bottom:6px;min-height:14px"></div>
+      <table><thead><tr><th>Game path (data/…)</th><th>Source</th><th>Size</th><th></th></tr></thead>
+        <tbody id="modFiles"></tbody></table>
+      <div style="font-family:var(--sans);font-weight:700;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-dim);margin:14px 0 6px">Preview (mod.json + contents)</div>
+      <textarea id="modPreview" spellcheck="false" readonly style="width:100%;height:180px;background:#0a1626;border:1px solid var(--edge);border-radius:6px;color:var(--ink);font:11px ui-monospace,monospace;padding:8px"></textarea>
+    </div>
+  </div>
+</div>
+
+<div id="bot">
+  <div class="wfbar">
+    <b>BOT BUILDER</b>
+    <span style="color:var(--ink-dim);font-size:11px">tactics table → byte-exact aiscript.bin · disasm-clean oracle in the browser</span>
+    <span style="flex:1"></span>
+    <button id="botClose">Close</button>
+  </div>
+  <div class="modbody">
+    <div class="modcol">
+      <div style="font-family:var(--sans);font-weight:700;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-dim)">Bot</div>
+      <div style="display:flex;gap:8px">
+        <div style="flex:1"><label class="f">Script ID (4 chars)</label><input id="botId" type="text" value="Bot1" maxlength="4" spellcheck="false"></div>
+        <div style="flex:1"><label class="f">Name (stat_txt idx)</label><input id="botName" type="number" value="0"></div>
+        <div style="width:74px"><label class="f">Flags</label><input id="botFlags" type="number" value="0"></div>
+      </div>
+      <label class="f">Templates (empty skeletons)</label>
+      <div>
+        <span class="chip" data-tpl="rush">⚔ Rush</span>
+        <span class="chip" data-tpl="defensive">🛡 Defense</span>
+        <span class="chip" data-tpl="adaptive">🧠 Adaptive</span>
+        <span class="chip" data-tpl="economic">💰 Economy</span>
+      </div>
+      <label class="f">Build-order library (Miro · 22 pro)</label>
+      <select id="botLib" style="width:100%"><option value="">— pick a build order —</option></select>
+      <label class="f" style="margin-top:10px">Tactics (1 step / line · <code>:label</code> · <code>#</code> comment)</label>
+      <textarea id="botSrc" spellcheck="false"></textarea>
+      <div style="color:var(--ink-dim);font-size:10px;line-height:1.5;margin-top:4px">Address arguments = label names. Others = numbers (<code>0x</code> hex). Unit/building IDs — numeric (see <code>units.dat</code>/<code>stat_txt.tbl</code>; a name→ID layer is deliberately not here — we measure, not guess).</div>
+      <label class="f" style="margin-top:10px"><input type="checkbox" id="botMerge"> Merge into the open <code>aiscript.bin</code> (keeps the 293 stock scripts)</label>
+      <div id="botMergeInfo" style="color:var(--ink-dim);font-size:10px"></div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button id="botDl" style="flex:1;background:#173a2a;border-color:#2a6a4a">⬇ aiscript.bin</button>
+        <button id="botToMod" style="flex:1">→ to Mod Builder</button>
+      </div>
+    </div>
+    <div class="modcol">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <div style="font-family:var(--sans);font-weight:700;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-dim);flex:1">Compilation + oracle</div>
+        <span id="botStat" style="font:12px ui-monospace,monospace"></span>
+      </div>
+      <div id="botSpec" style="margin-bottom:12px"></div>
+      <pre id="botDis" class="dis"></pre>
+    </div>
+  </div>
+</div>
+
+<div id="dat">
+  <div class="wfbar">
+    <b>DAT EDITOR</b>
+    <select id="datKind"><option value="units.dat">units.dat (228 units)</option><option value="weapons.dat">weapons.dat (130 weapons)</option></select>
+    <input id="datSearch" type="text" placeholder="search (name / id)" style="width:220px">
+    <label style="font-size:11px;color:var(--ink-dim)"><input type="checkbox" id="datAllFields"> all fields</label>
+    <span id="datStat" style="color:var(--ink-dim);font-size:11px"></span>
+    <span style="flex:1"></span>
+    <button id="datToMod">→ to Mod Builder</button>
+    <button id="datDl">⬇ .dat</button>
+    <button id="datClose">Close</button>
+  </div>
+  <div class="modbody">
+    <div class="modcol">
+      <div style="font-family:var(--sans);font-weight:700;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-dim);margin-bottom:6px">Entries (<span id="datCount">0</span>)</div>
+      <div class="elist" id="datList"></div>
+    </div>
+    <div class="modcol">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <div id="datTitle" style="font-family:var(--sans);font-weight:700;font-size:13px;color:var(--teal);flex:1">—</div>
+        <button id="datRevert" title="revert this entry's changes">↺ entry</button>
+      </div>
+      <div id="datChain"></div>
+      <table><thead><tr><th style="width:44%">Field</th><th>Value</th><th>Stock</th></tr></thead>
+        <tbody id="datFields"></tbody></table>
+      <div style="color:var(--ink-dim);font-size:10px;line-height:1.5;margin-top:8px">HP/shield shown as <b>the real value</b> (stored 1/256; written ×256). Changed fields are marked green. The launcher reads a <code>data/arr/&lt;file&gt;</code> override — works immediately. Byte-for-byte round-trip (JS = Python, sha matches).</div>
+    </div>
+  </div>
+</div>
+
+<div id="spr">
+  <div class="wfbar">
+    <b>SPRITE IMPORTER</b>
+    <span style="color:var(--ink-dim);font-size:11px">PNG → palette quantization → classic GRP → unit override</span>
+    <span style="flex:1"></span>
+    <button id="sprToMod">→ to Mod Builder</button>
+    <button id="sprDl">⬇ .grp</button>
+    <button id="sprClose">Close</button>
+  </div>
+  <div class="modbody">
+    <div class="modcol">
+      <div style="font-family:var(--sans);font-weight:700;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-dim);margin-bottom:6px">1 · Palette</div>
+      <button class="src" id="sprPalUnit" style="width:100%">Load unit palette (unit\\tunit.pcx)</button>
+      <label class="file src" style="text-align:center;display:block;margin-top:4px">or load a .pal/.wpe/.pcx
+        <input id="sprPalFile" type="file" accept=".pal,.wpe,.act,.pcx" hidden></label>
+      <div id="sprPalInfo" style="color:var(--ink-dim);font-size:10px;margin-top:4px">The active preview palette is used if none is loaded.</div>
+      <div id="sprPalStrip" style="margin-top:6px;line-height:0"></div>
+
+      <div style="font-family:var(--sans);font-weight:700;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-dim);margin:14px 0 6px">2 · Frames (PNG)</div>
+      <label class="file src" style="text-align:center;display:block">+ Load PNG frames (multiple = animation)
+        <input id="sprPng" type="file" accept="image/png,image/*" multiple hidden></label>
+      <div style="color:var(--ink-dim);font-size:10px;margin-top:2px">Transparency (alpha=0) → index 0. Other pixels → nearest palette index.</div>
+      <div id="sprFrames" style="margin-top:8px"></div>
+
+      <div style="font-family:var(--sans);font-weight:700;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-dim);margin:14px 0 6px">3 · Export</div>
+      <label class="f">Game path (data/…)</label>
+      <input id="sprPath" type="text" value="unit\\terran\\marine.grp" spellcheck="false">
+    </div>
+    <div class="modcol">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <div style="font-family:var(--sans);font-weight:700;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-dim);flex:1">Preview (how the game will render it)</div>
+        <span id="sprStat" style="color:var(--ink-dim);font-size:11px"></span>
+      </div>
+      <div id="sprPreview" class="pv"></div>
+      <div style="color:var(--ink-dim);font-size:10px;line-height:1.5;margin-top:12px">The preview is decoded from the generated GRP through <b>the same RLE</b> logic as Python <code>tools/grp.py</code> — what you see is what the game reads (pixel round-trip oracle: <code>tests/test_grp_writer.py</code>). The launcher reads a <code>data/unit/…</code> override above the MPQ.</div>
+    </div>
+  </div>
+</div>
+
+<div id="isc">
+  <div class="wfbar">
+    <b>ISCRIPT EDITOR</b>
+    <span style="color:var(--ink-dim);font-size:11px">disasm + value editing (in-place, same size)</span>
+    <span id="iscStat" style="color:var(--ink-dim);font-size:11px"></span>
+    <span style="flex:1"></span>
+    <button id="iscAsmToggle" title="text assembler — write an animation from text and merge into iscript.bin">✎ Text assembler</button>
+    <button id="iscToMod">→ to Mod Builder</button>
+    <button id="iscDl">⬇ iscript.bin</button>
+    <button id="iscClose">Close</button>
+  </div>
+  <div class="modbody">
+    <div class="modcol">
+      <div style="font-family:var(--sans);font-weight:700;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-dim)">Scripts (<span id="iscCount">0</span>)</div>
+      <input id="iscSearch" type="text" placeholder="search (id)" spellcheck="false" style="margin-top:6px">
+      <div class="elist" id="iscList"></div>
+    </div>
+    <div class="modcol">
+      <div id="iscTitle" style="font-family:var(--sans);font-weight:700;font-size:13px;color:var(--teal);margin-bottom:8px">—</div>
+      <pre id="iscDis" class="dis"></pre>
+      <div id="iscAsm" style="display:none">
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
+          <button id="iscAsmFromSel" title="generate text from the selected script">← from selected</button>
+          <button id="iscAsmCompile" style="background:#173a2a;border-color:#2a6a4a">Compile + merge</button>
+          <span id="iscAsmStat" style="font:12px ui-monospace,monospace"></span>
+        </div>
+        <textarea id="iscAsmText" spellcheck="false" style="width:100%;height:calc(100vh - 220px);background:#0a1626;border:1px solid var(--edge);border-radius:6px;color:var(--ink);font:12px ui-monospace,monospace;padding:10px;white-space:pre;line-height:1.5"></textarea>
+        <div style="color:var(--ink-dim);font-size:10px;line-height:1.5;margin-top:4px"><code>.header id=N type=T</code> · <code>Anim -&gt; label</code> · <code>.code</code> · <code>label:</code> · opcodes (label arg = label name; <code>playsndrand N s1..sN</code>). Merge into iscript.bin keeps all stock scripts. Byte-verified (JS = Python).</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="text/plain" id="builtinListfile">%%LISTFILE%%</script>
+<script>%%JS%%</script>
+</body>
+</html>

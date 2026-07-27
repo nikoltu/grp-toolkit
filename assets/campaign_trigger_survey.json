@@ -1,0 +1,458 @@
+{
+ "missions": 64,
+ "triggers": 1850,
+ "conditions": 2767,
+ "actions": 9666,
+ "condition_types": {
+  "Bring": 933,
+  "Switch": 931,
+  "Command": 408,
+  "Always": 254,
+  "ElapsedTime": 134,
+  "CountdownTimer": 26,
+  "Score": 23,
+  "Deaths": 19,
+  "Accumulate": 15,
+  "Kills": 15,
+  "Never": 7,
+  "CommandsTheMostAt": 1,
+  "CommandsTheLeastAt": 1
+ },
+ "action_types": {
+  "Comment": 1366,
+  "CreateUnitWithProperties": 838,
+  "SetSwitch": 808,
+  "Wait": 694,
+  "Transmission": 638,
+  "Order": 615,
+  "RunAIScriptAtLocation": 557,
+  "CreateUnit": 510,
+  "PlayWAV": 405,
+  "PreserveTrigger": 266,
+  "MuteUnitSpeech": 259,
+  "UnmuteUnitSpeech": 254,
+  "SetResources": 213,
+  "GiveUnitstoPlayer": 211,
+  "RemoveUnitAtLocation": 208,
+  "SetDoodadState": 165,
+  "MinimapPing": 157,
+  "DisplayTextMessage": 144,
+  "Defeat": 135,
+  "PauseGame": 131,
+  "SetAllianceStatus": 129,
+  "CenterView": 126,
+  "SetScore": 92,
+  "KillUnitsAtLocation": 91,
+  "SetMissionObjectives": 86,
+  "MoveLocation": 85,
+  "Victory": 73,
+  "RemoveUnit": 68,
+  "SetInvincibility": 63,
+  "UnpauseGame": 56,
+  "MoveUnit": 56,
+  "RunAIScript": 50,
+  "SetNextScenario": 43,
+  "KillUnit": 22,
+  "SetCountdownTimer": 13,
+  "ModifyUnitEnergy": 10,
+  "LeaderboardComputerPlayers": 6,
+  "ModifyUnitHitPoints": 6,
+  "SetDeaths": 4,
+  "LeaderBoardControl": 2,
+  "LeaderBoardPoints": 2,
+  "LeaderboardGoalKills": 2,
+  "ModifyUnitShieldPoints": 2,
+  "PauseTimer": 2,
+  "LeaderboardGoalPoints": 1,
+  "LeaderBoardResources": 1,
+  "UnpauseTimer": 1
+ },
+ "unknown_condition_types": {},
+ "unknown_action_ids": {},
+ "per_mission": [
+  {
+   "mission": "terran/terran01",
+   "triggers": 9,
+   "conditions": 14,
+   "actions": 43
+  },
+  {
+   "mission": "terran/terran02",
+   "triggers": 15,
+   "conditions": 24,
+   "actions": 77
+  },
+  {
+   "mission": "terran/terran03",
+   "triggers": 10,
+   "conditions": 17,
+   "actions": 76
+  },
+  {
+   "mission": "terran/terran04",
+   "triggers": 36,
+   "conditions": 43,
+   "actions": 151
+  },
+  {
+   "mission": "terran/terran05",
+   "triggers": 17,
+   "conditions": 20,
+   "actions": 85
+  },
+  {
+   "mission": "terran/terran06",
+   "triggers": 20,
+   "conditions": 31,
+   "actions": 80
+  },
+  {
+   "mission": "terran/terran07",
+   "triggers": 17,
+   "conditions": 22,
+   "actions": 157
+  },
+  {
+   "mission": "terran/terran08",
+   "triggers": 10,
+   "conditions": 12,
+   "actions": 39
+  },
+  {
+   "mission": "terran/terran09",
+   "triggers": 13,
+   "conditions": 15,
+   "actions": 41
+  },
+  {
+   "mission": "terran/terran10",
+   "triggers": 11,
+   "conditions": 16,
+   "actions": 47
+  },
+  {
+   "mission": "terran/terran11",
+   "triggers": 11,
+   "conditions": 13,
+   "actions": 91
+  },
+  {
+   "mission": "terran/terran12",
+   "triggers": 7,
+   "conditions": 7,
+   "actions": 19
+  },
+  {
+   "mission": "zerg/zerg01",
+   "triggers": 13,
+   "conditions": 24,
+   "actions": 57
+  },
+  {
+   "mission": "zerg/zerg02",
+   "triggers": 9,
+   "conditions": 14,
+   "actions": 35
+  },
+  {
+   "mission": "zerg/zerg03",
+   "triggers": 6,
+   "conditions": 6,
+   "actions": 21
+  },
+  {
+   "mission": "zerg/zerg04",
+   "triggers": 7,
+   "conditions": 10,
+   "actions": 86
+  },
+  {
+   "mission": "zerg/zerg05",
+   "triggers": 36,
+   "conditions": 42,
+   "actions": 146
+  },
+  {
+   "mission": "zerg/zerg06",
+   "triggers": 9,
+   "conditions": 13,
+   "actions": 62
+  },
+  {
+   "mission": "zerg/zerg07",
+   "triggers": 8,
+   "conditions": 8,
+   "actions": 15
+  },
+  {
+   "mission": "zerg/zerg08",
+   "triggers": 39,
+   "conditions": 55,
+   "actions": 135
+  },
+  {
+   "mission": "zerg/zerg09",
+   "triggers": 14,
+   "conditions": 16,
+   "actions": 63
+  },
+  {
+   "mission": "zerg/zerg10",
+   "triggers": 10,
+   "conditions": 10,
+   "actions": 33
+  },
+  {
+   "mission": "protoss/protoss01",
+   "triggers": 13,
+   "conditions": 22,
+   "actions": 56
+  },
+  {
+   "mission": "protoss/protoss02",
+   "triggers": 8,
+   "conditions": 9,
+   "actions": 52
+  },
+  {
+   "mission": "protoss/protoss03",
+   "triggers": 5,
+   "conditions": 5,
+   "actions": 17
+  },
+  {
+   "mission": "protoss/protoss04",
+   "triggers": 13,
+   "conditions": 16,
+   "actions": 153
+  },
+  {
+   "mission": "protoss/protoss05",
+   "triggers": 11,
+   "conditions": 12,
+   "actions": 49
+  },
+  {
+   "mission": "protoss/protoss06",
+   "triggers": 23,
+   "conditions": 25,
+   "actions": 93
+  },
+  {
+   "mission": "protoss/protoss07",
+   "triggers": 10,
+   "conditions": 10,
+   "actions": 52
+  },
+  {
+   "mission": "protoss/protoss08",
+   "triggers": 8,
+   "conditions": 9,
+   "actions": 69
+  },
+  {
+   "mission": "protoss/protoss09",
+   "triggers": 12,
+   "conditions": 17,
+   "actions": 40
+  },
+  {
+   "mission": "protoss/protoss10",
+   "triggers": 8,
+   "conditions": 8,
+   "actions": 75
+  },
+  {
+   "mission": "expterran/terran01",
+   "triggers": 12,
+   "conditions": 13,
+   "actions": 73
+  },
+  {
+   "mission": "expterran/terran02",
+   "triggers": 89,
+   "conditions": 189,
+   "actions": 693
+  },
+  {
+   "mission": "expterran/terran03",
+   "triggers": 37,
+   "conditions": 50,
+   "actions": 203
+  },
+  {
+   "mission": "expterran/terran04",
+   "triggers": 31,
+   "conditions": 59,
+   "actions": 105
+  },
+  {
+   "mission": "expterran/terran05a",
+   "triggers": 53,
+   "conditions": 67,
+   "actions": 382
+  },
+  {
+   "mission": "expterran/terran05b",
+   "triggers": 29,
+   "conditions": 32,
+   "actions": 250
+  },
+  {
+   "mission": "expterran/terran06",
+   "triggers": 74,
+   "conditions": 89,
+   "actions": 358
+  },
+  {
+   "mission": "expterran/terran07",
+   "triggers": 209,
+   "conditions": 362,
+   "actions": 926
+  },
+  {
+   "mission": "expterran/terran08",
+   "triggers": 61,
+   "conditions": 82,
+   "actions": 280
+  },
+  {
+   "mission": "expzerg/zerg01",
+   "triggers": 73,
+   "conditions": 99,
+   "actions": 444
+  },
+  {
+   "mission": "expzerg/zerg02",
+   "triggers": 78,
+   "conditions": 99,
+   "actions": 342
+  },
+  {
+   "mission": "expzerg/zerg03",
+   "triggers": 23,
+   "conditions": 30,
+   "actions": 125
+  },
+  {
+   "mission": "expzerg/zerg04a",
+   "triggers": 9,
+   "conditions": 10,
+   "actions": 53
+  },
+  {
+   "mission": "expzerg/zerg04b",
+   "triggers": 9,
+   "conditions": 10,
+   "actions": 53
+  },
+  {
+   "mission": "expzerg/zerg04c",
+   "triggers": 9,
+   "conditions": 10,
+   "actions": 53
+  },
+  {
+   "mission": "expzerg/zerg04d",
+   "triggers": 9,
+   "conditions": 10,
+   "actions": 53
+  },
+  {
+   "mission": "expzerg/zerg04e",
+   "triggers": 9,
+   "conditions": 10,
+   "actions": 53
+  },
+  {
+   "mission": "expzerg/zerg04f",
+   "triggers": 9,
+   "conditions": 10,
+   "actions": 53
+  },
+  {
+   "mission": "expzerg/zerg05",
+   "triggers": 27,
+   "conditions": 44,
+   "actions": 150
+  },
+  {
+   "mission": "expzerg/zerg06",
+   "triggers": 73,
+   "conditions": 117,
+   "actions": 256
+  },
+  {
+   "mission": "expzerg/zerg07",
+   "triggers": 14,
+   "conditions": 19,
+   "actions": 118
+  },
+  {
+   "mission": "expzerg/zerg08",
+   "triggers": 33,
+   "conditions": 51,
+   "actions": 175
+  },
+  {
+   "mission": "expzerg/zerg09",
+   "triggers": 31,
+   "conditions": 57,
+   "actions": 251
+  },
+  {
+   "mission": "expzerg/zerg10",
+   "triggers": 19,
+   "conditions": 33,
+   "actions": 78
+  },
+  {
+   "mission": "expprotoss/protoss01",
+   "triggers": 117,
+   "conditions": 183,
+   "actions": 484
+  },
+  {
+   "mission": "expprotoss/protoss02",
+   "triggers": 30,
+   "conditions": 61,
+   "actions": 157
+  },
+  {
+   "mission": "expprotoss/protoss03",
+   "triggers": 41,
+   "conditions": 52,
+   "actions": 180
+  },
+  {
+   "mission": "expprotoss/protoss04",
+   "triggers": 29,
+   "conditions": 35,
+   "actions": 142
+  },
+  {
+   "mission": "expprotoss/protoss05",
+   "triggers": 102,
+   "conditions": 202,
+   "actions": 475
+  },
+  {
+   "mission": "expprotoss/protoss06",
+   "triggers": 24,
+   "conditions": 39,
+   "actions": 109
+  },
+  {
+   "mission": "expprotoss/protoss07",
+   "triggers": 29,
+   "conditions": 43,
+   "actions": 232
+  },
+  {
+   "mission": "expprotoss/protoss08",
+   "triggers": 20,
+   "conditions": 35,
+   "actions": 145
+  }
+ ]
+}
